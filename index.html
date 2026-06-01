@@ -131,6 +131,21 @@
 
 <!-- APP PRINCIPAL -->
 <div id="pg-app">
+<!-- TELA DE LOGIN ADMIN -->
+<div id="pg-login" style="display:none;min-height:100vh;background:var(--cacao);align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--warm-white);border-radius:20px;padding:36px;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center">
+    <div style="font-size:48px;margin-bottom:8px">🍫</div>
+    <div style="font-family:'Playfair Display',serif;font-size:24px;color:var(--chocolate);margin-bottom:4px">Consignado</div>
+    <div style="font-size:12px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:24px">Painel Administrativo</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <input type="password" id="admin-senha" placeholder="Senha de acesso" style="text-align:center;font-size:16px;padding:12px"
+        onkeydown="if(event.key==='Enter')loginAdmin()">
+      <button class="btn btn-primary" onclick="loginAdmin()" style="justify-content:center;padding:12px">Entrar →</button>
+    </div>
+    <div id="login-erro" style="margin-top:12px;font-size:13px;color:var(--red-alert)"></div>
+  </div>
+</div>
+
 <header>
   <div class="brand"><span class="brand-icon">🍫</span><div><div class="brand-name">Consignado</div><div class="brand-sub">Gestão de Pontos de Venda</div></div></div>
   <div class="header-tabs">
@@ -141,6 +156,7 @@
     <button class="tab-btn" onclick="showSection('acertos')">💰 Acertos</button>
     <button class="tab-btn" onclick="showSection('acesso-ponto')">🔑 Acesso Ponto</button>
     <button class="tab-btn" onclick="showSection('estoque')">📦 Estoque</button>
+    <button class="tab-btn" onclick="logoutAdmin()" style="background:rgba(255,255,255,.1);margin-left:8px">🔒 Sair</button>
   </div>
 </header>
 <div class="container">
@@ -443,10 +459,69 @@ function hideLoading() {
 }
 
 // ── ROTEAMENTO ──
+const ADMIN_SENHA = 'admin@123';
 function rotear(){
   const p=new URLSearchParams(location.search);
-  const id=p.get('assinar');
-  if(id){document.getElementById('pg-app').style.display='none';document.getElementById('pg-assinar').style.display='block';iniciarAssinatura(id);}
+  const assinarId=p.get('assinar');
+  const pontoCode=p.get('ponto');
+
+  if(assinarId){
+    // Link de assinatura de entrega
+    document.getElementById('pg-login').style.display='none';
+    document.getElementById('pg-app').style.display='none';
+    document.getElementById('pg-assinar').style.display='block';
+    iniciarAssinatura(assinarId);
+    return;
+  }
+
+  if(pontoCode){
+    // Link do ponto — abre direto na tela do ponto sem login admin
+    document.getElementById('pg-login').style.display='none';
+    document.getElementById('pg-app').style.display='block';
+    // Vai direto para acesso ponto e faz login automático
+    setTimeout(async()=>{
+      showSection('acesso-ponto');
+      document.getElementById('acesso-codigo').value=pontoCode;
+      await entrarAcesso();
+    },100);
+    return;
+  }
+
+  // Sem parâmetro — verificar se já está logado como admin
+  if(sessionStorage.getItem('admin_ok')==='1'){
+    document.getElementById('pg-login').style.display='none';
+    document.getElementById('pg-app').style.display='block';
+    renderDashboard();
+  } else {
+    document.getElementById('pg-app').style.display='none';
+    document.getElementById('pg-login').style.display='flex';
+  }
+}
+
+function copiarLinkPonto(codigo, nome){
+  if(!codigo){alert('Este ponto não tem código cadastrado. Edite o ponto e adicione um código.');return;}
+  const link=location.href.split('?')[0]+'?ponto='+codigo;
+  navigator.clipboard.writeText(link)
+    .then(()=>alert('Link do ponto "'+nome+'" copiado!\n\n'+link))
+    .catch(()=>{
+      prompt('Copie o link abaixo:', link);
+    });
+}
+function logoutAdmin(){
+  sessionStorage.removeItem('admin_ok');
+  location.href=location.href.split('?')[0];
+}
+function loginAdmin(){
+  const senha=document.getElementById('admin-senha').value;
+  if(senha===ADMIN_SENHA){
+    sessionStorage.setItem('admin_ok','1');
+    document.getElementById('pg-login').style.display='none';
+    document.getElementById('pg-app').style.display='block';
+    renderDashboard();
+  } else {
+    document.getElementById('login-erro').textContent='Senha incorreta.';
+    document.getElementById('admin-senha').value='';
+  }
 }
 
 // ── ASSINATURA ──
@@ -579,6 +654,7 @@ async function renderPontos(){
       ${p.codigo?`<div class="ponto-saldo"><span>Código:</span><span class="badge badge-gold">${p.codigo}</span></div>`:''}
       <div class="ponto-actions">
         <button class="btn btn-outline btn-sm" onclick="showSection('entregas');setTimeout(()=>{document.getElementById('ent-ponto').value='${p.id}'},300)">🚚 Entregar</button>
+        <button class="btn btn-gold btn-sm" onclick="copiarLinkPonto('${p.codigo}','${p.nome}')">🔗 Link</button>
         <button class="btn btn-danger btn-sm" onclick="excluirPonto('${p.id}')">🗑</button>
       </div>
     </div>`;
@@ -1083,7 +1159,6 @@ document.getElementById('ent-data').value=hoje();
 document.getElementById('acerto-data').value=hoje();
 
 rotear();
-renderDashboard();
 </script>
 
 <!-- MODAL DIALOGO EXCLUSÃO -->
