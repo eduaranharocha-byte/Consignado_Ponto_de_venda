@@ -947,29 +947,23 @@ async function buscarCNPJ(){
   resEl.style.display='block';
   resEl.innerHTML='<div class="alert alert-success">⏳ Buscando dados na Receita Federal...</div>';
   try{
-    const res=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+    const res=await fetch('https://brasilapi.com.br/api/cnpj/v1/'+cnpj);
     if(!res.ok)throw new Error('CNPJ não encontrado');
     const d=await res.json();
     document.getElementById('ponto-razao').value=d.razao_social||'';
     document.getElementById('ponto-fantasia').value=d.nome_fantasia||'';
-    // Preencher endereço se vazio
     if(!document.getElementById('ponto-end').value&&d.logradouro){
-      document.getElementById('ponto-end').value=`${d.logradouro}, ${d.numero||'s/n'} — ${d.municipio}/${d.uf}`;
+      document.getElementById('ponto-end').value=d.logradouro+', '+(d.numero||'s/n')+' — '+d.municipio+'/'+d.uf;
     }
-    // Preencher nome se vazio
     if(!document.getElementById('ponto-nome').value){
       document.getElementById('ponto-nome').value=d.nome_fantasia||d.razao_social||'';
     }
-    resEl.innerHTML=`<div class="alert alert-success">
-      ✅ <strong>${d.razao_social}</strong><br>
-      <small>
-        ${d.nome_fantasia?'Nome Fantasia: '+d.nome_fantasia+'<br>':''}
-        Situação: <strong style="color:${d.descricao_situacao_cadastral==='ATIVA'?'var(--green-ok)':'var(--red-alert)}">${d.descricao_situacao_cadastral}</strong><br>
-        ${d.logradouro?'📍 '+d.logradouro+', '+d.numero+' — '+d.municipio+'/'+d.uf:''}
-      </small>
-    </div>`;
+    const cor=d.descricao_situacao_cadastral==='ATIVA'?'var(--green-ok)':'var(--red-alert)';
+    const fantasia=d.nome_fantasia?'Nome Fantasia: '+d.nome_fantasia+'<br>':'';
+    const ende=d.logradouro?'📍 '+d.logradouro+', '+d.numero+' — '+d.municipio+'/'+d.uf:'';
+    resEl.innerHTML='<div class="alert alert-success">✅ <strong>'+d.razao_social+'</strong><br><small>'+fantasia+'Situação: <strong style="color:'+cor+'">'+d.descricao_situacao_cadastral+'</strong><br>'+ende+'</small></div>';
   }catch(err){
-    resEl.innerHTML='<div class="alert alert-error">❌ CNPJ não encontrado ou inválido. Verifique e tente novamente.</div>';
+    resEl.innerHTML='<div class="alert alert-error">❌ CNPJ não encontrado ou inválido.</div>';
   }
 }
 
