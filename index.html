@@ -932,46 +932,46 @@ async function renderHistoricoEstoque(){
 }
 
 // ── CNPJ ──
-function mascaraCNPJ(input){{
+function mascaraCNPJ(input){
   let v=input.value.replace(/\D/g,'').slice(0,14);
-  if(v.length>12)v=v.replace(/(\d{{2}})(\d{{3}})(\d{{3}})(\d{{4}})(\d{{1,2}})/,'$1.$2.$3/$4-$5');
-  else if(v.length>8)v=v.replace(/(\d{{2}})(\d{{3}})(\d{{3}})(\d{{1,4}})/,'$1.$2.$3/$4');
-  else if(v.length>5)v=v.replace(/(\d{{2}})(\d{{3}})(\d{{1,3}})/,'$1.$2.$3');
-  else if(v.length>2)v=v.replace(/(\d{{2}})(\d{{1,3}})/,'$1.$2');
+  if(v.length>12)v=v.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{1,2})/,'$1.$2.$3/$4-$5');
+  else if(v.length>8)v=v.replace(/(\d{2})(\d{3})(\d{3})(\d{1,4})/,'$1.$2.$3/$4');
+  else if(v.length>5)v=v.replace(/(\d{2})(\d{3})(\d{1,3})/,'$1.$2.$3');
+  else if(v.length>2)v=v.replace(/(\d{2})(\d{1,3})/,'$1.$2');
   input.value=v;
-}}
-async function buscarCNPJ(){{
+}
+async function buscarCNPJ(){
   const cnpj=document.getElementById('ponto-cnpj').value.replace(/\D/g,'');
-  if(cnpj.length!==14){{alert('Digite um CNPJ completo com 14 dígitos.');return;}}
+  if(cnpj.length!==14){alert('Digite um CNPJ completo com 14 dígitos.');return;}
   const resEl=document.getElementById('cnpj-resultado');
   resEl.style.display='block';
   resEl.innerHTML='<div class="alert alert-success">⏳ Buscando dados na Receita Federal...</div>';
-  try{{
-    const res=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${{cnpj}}`);
+  try{
+    const res=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
     if(!res.ok)throw new Error('CNPJ não encontrado');
     const d=await res.json();
     document.getElementById('ponto-razao').value=d.razao_social||'';
     document.getElementById('ponto-fantasia').value=d.nome_fantasia||'';
     // Preencher endereço se vazio
-    if(!document.getElementById('ponto-end').value&&d.logradouro){{
-      document.getElementById('ponto-end').value=`${{d.logradouro}}, ${{d.numero||'s/n'}} — ${{d.municipio}}/${{d.uf}}`;
-    }}
+    if(!document.getElementById('ponto-end').value&&d.logradouro){
+      document.getElementById('ponto-end').value=`${d.logradouro}, ${d.numero||'s/n'} — ${d.municipio}/${d.uf}`;
+    }
     // Preencher nome se vazio
-    if(!document.getElementById('ponto-nome').value){{
+    if(!document.getElementById('ponto-nome').value){
       document.getElementById('ponto-nome').value=d.nome_fantasia||d.razao_social||'';
-    }}
+    }
     resEl.innerHTML=`<div class="alert alert-success">
-      ✅ <strong>${{d.razao_social}}</strong><br>
+      ✅ <strong>${d.razao_social}</strong><br>
       <small>
-        ${{d.nome_fantasia?'Nome Fantasia: '+d.nome_fantasia+'<br>':''}}
-        Situação: <strong style="color:${{d.descricao_situacao_cadastral==='ATIVA'?'var(--green-ok)':'var(--red-alert)}}">${{d.descricao_situacao_cadastral}}</strong><br>
-        ${{d.logradouro?'📍 '+d.logradouro+', '+d.numero+' — '+d.municipio+'/'+d.uf:''}}
+        ${d.nome_fantasia?'Nome Fantasia: '+d.nome_fantasia+'<br>':''}
+        Situação: <strong style="color:${d.descricao_situacao_cadastral==='ATIVA'?'var(--green-ok)':'var(--red-alert)}">${d.descricao_situacao_cadastral}</strong><br>
+        ${d.logradouro?'📍 '+d.logradouro+', '+d.numero+' — '+d.municipio+'/'+d.uf:''}
       </small>
     </div>`;
-  }}catch(err){{
+  }catch(err){
     resEl.innerHTML='<div class="alert alert-error">❌ CNPJ não encontrado ou inválido. Verifique e tente novamente.</div>';
-  }}
-}}
+  }
+}
 
 // ── DASHBOARD ──
 async function renderDashboard(){
