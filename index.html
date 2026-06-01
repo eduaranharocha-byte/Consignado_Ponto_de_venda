@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Consignado — Gestão de Pontos</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--cacao:#3b1f0a;--chocolate:#5c2d0e;--caramel:#c47b2b;--cream:#fdf6ed;--warm-white:#fffaf4;--toast:#e8d5b7;--gold:#d4a043;--green-ok:#2d6a4f;--green-light:#d8f3dc;--red-alert:#9d2235;--red-light:#ffe5e9;--text-main:#1e0f05;--text-muted:#7a5c42;--shadow:0 4px 24px rgba(59,31,10,.10);--radius:16px}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-main);min-height:100vh}
+  header{background:var(--cacao);padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand-icon{font-size:28px}.brand-name{font-family:'Playfair Display',serif;color:var(--cream);font-size:22px}
+  .brand-sub{color:var(--caramel);font-size:12px;letter-spacing:2px;text-transform:uppercase}
+  .header-tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tab-btn{background:transparent;border:1.5px solid rgba(255,255,255,.2);color:var(--toast);padding:7px 18px;border-radius:50px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
+  .tab-btn:hover{background:rgba(255,255,255,.08);color:var(--cream)}.tab-btn.active{background:var(--caramel);border-color:var(--caramel);color:#fff}
+  .container{max-width:1100px;margin:0 auto;padding:28px 20px 60px}
+  .section{display:none}.section.active{display:block}
+  .card{background:var(--warm-white);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px;margin-bottom:20px;border:1px solid rgba(196,123,43,.12)}
+  .card-title{font-family:'Playfair Display',serif;font-size:18px;color:var(--chocolate);margin-bottom:18px;display:flex;align-items:center;gap:8px}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:16px;margin-bottom:24px}
+  .stat-card{background:var(--warm-white);border-radius:var(--radius);padding:20px;border:1px solid rgba(196,123,43,.15);box-shadow:var(--shadow)}
+  .stat-label{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:6px}
+  .stat-value{font-family:'Playfair Display',serif;font-size:28px;color:var(--chocolate)}
+  .stat-value.money{color:var(--green-ok)}.stat-value.alert{color:var(--red-alert)}
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+  .form-group{display:flex;flex-direction:column;gap:5px}
+  label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px}
+  input,select,textarea{padding:10px 14px;border-radius:10px;border:1.5px solid var(--toast);background:var(--cream);font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text-main);transition:border .2s;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--caramel)}
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:10px 22px;border-radius:50px;border:none;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none}
+  .btn-primary{background:var(--chocolate);color:#fff}.btn-primary:hover{background:var(--cacao)}
+  .btn-gold{background:var(--gold);color:#fff}.btn-gold:hover{background:var(--caramel)}
+  .btn-green{background:var(--green-ok);color:#fff}.btn-green:hover{opacity:.88}
+  .btn-danger{background:var(--red-alert);color:#fff}.btn-danger:hover{opacity:.88}
+  .btn-outline{background:transparent;border:1.5px solid var(--chocolate);color:var(--chocolate)}.btn-outline:hover{background:var(--chocolate);color:#fff}
+  .btn-whatsapp{background:#25d366;color:#fff}.btn-sm{padding:6px 14px;font-size:12px}
+  .table-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  thead{background:var(--cacao);color:var(--cream)}
+  th{padding:11px 14px;text-align:left;font-weight:600;font-size:12px;letter-spacing:.5px;white-space:nowrap}
+  td{padding:11px 14px;border-bottom:1px solid var(--toast);vertical-align:middle}
+  tr:last-child td{border-bottom:none}tr:hover td{background:rgba(196,123,43,.05)}
+  .badge{display:inline-block;padding:3px 10px;border-radius:50px;font-size:11px;font-weight:700}
+  .badge-green{background:var(--green-light);color:var(--green-ok)}.badge-red{background:var(--red-light);color:var(--red-alert)}.badge-gold{background:#fff3cd;color:#856404}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(30,15,5,.55);z-index:999;justify-content:center;align-items:center;padding:20px}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--warm-white);border-radius:20px;box-shadow:0 16px 60px rgba(59,31,10,.3);padding:32px;max-width:580px;width:100%;max-height:92vh;overflow-y:auto;position:relative}
+  .modal-title{font-family:'Playfair Display',serif;font-size:20px;color:var(--chocolate);margin-bottom:20px}
+  .modal-close{position:absolute;top:16px;right:16px;background:var(--toast);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+  .recibo-box{background:#fff;border:2px dashed var(--caramel);border-radius:var(--radius);padding:28px;font-size:13px;line-height:1.8;max-width:480px;margin:0 auto}
+  .recibo-logo{font-family:'Playfair Display',serif;font-size:22px;color:var(--cacao);text-align:center;margin-bottom:4px}
+  .recibo-sub{text-align:center;color:var(--text-muted);font-size:11px;letter-spacing:2px;margin-bottom:16px}
+  .recibo-linha{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dotted var(--toast)}
+  .recibo-total{font-weight:700;font-size:16px;color:var(--green-ok);margin-top:10px;padding-top:10px;border-top:2px solid var(--caramel)}
+  .recibo-assin{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px;text-align:center}
+  .assin-line{border-top:1.5px solid var(--text-main);padding-top:4px;font-size:11px;color:var(--text-muted)}
+  .ponto-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px}
+  .ponto-card{background:var(--warm-white);border-radius:var(--radius);border:1px solid rgba(196,123,43,.18);box-shadow:var(--shadow);padding:20px;transition:transform .2s}
+  .ponto-card:hover{transform:translateY(-3px)}
+  .ponto-nome{font-family:'Playfair Display',serif;font-size:16px;color:var(--chocolate)}
+  .ponto-resp{font-size:13px;color:var(--text-muted);margin-bottom:12px}
+  .ponto-saldo{font-size:13px;margin:4px 0;display:flex;justify-content:space-between}
+  .ponto-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .alert{padding:12px 18px;border-radius:10px;font-size:13px;margin-bottom:16px}
+  .alert-success{background:var(--green-light);color:var(--green-ok);border:1px solid #b7e4c7}
+  .alert-error{background:var(--red-light);color:var(--red-alert);border:1px solid #ffb3c1}
+  /* CANVAS ASSINATURA */
+  #sig-canvas{border:2px solid var(--caramel);border-radius:12px;background:#fff;touch-action:none;cursor:crosshair;width:100%;max-width:460px;display:block;margin:0 auto}
+  .sig-actions{display:flex;gap:10px;margin-top:10px;justify-content:center;flex-wrap:wrap}
+  /* PÁGINA ASSINATURA */
+  #pg-assinar{display:none;min-height:100vh;background:var(--cream)}
+  .assinar-header{background:var(--cacao);padding:20px 24px;text-align:center;color:var(--cream)}
+  .assinar-header h1{font-family:'Playfair Display',serif;font-size:20px}
+  .assinar-header p{color:var(--caramel);font-size:12px;letter-spacing:1.5px}
+  .assinar-body{padding:20px;max-width:500px;margin:0 auto}
+  .entrega-resumo{background:#fff;border-radius:14px;padding:20px;margin-bottom:20px;border:1px solid var(--toast);box-shadow:var(--shadow)}
+  .entrega-resumo h3{font-family:'Playfair Display',serif;color:var(--chocolate);margin-bottom:12px}
+  .resumo-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dotted var(--toast);font-size:14px}
+  .sig-wrap{background:#fff;border-radius:14px;padding:20px;border:1px solid var(--toast);box-shadow:var(--shadow)}
+  .sig-wrap h3{font-family:'Playfair Display',serif;color:var(--chocolate);margin-bottom:8px;font-size:16px}
+  .sig-instrucao{font-size:12px;color:var(--text-muted);margin-bottom:12px}
+  .assinado-ok{text-align:center;padding:40px 20px;color:var(--green-ok)}
+  .assinado-ok .ok-icon{font-size:60px;display:block;margin-bottom:14px}
+  .assinado-ok h2{font-family:'Playfair Display',serif;font-size:24px}
+  .acesso-header{background:var(--cacao);border-radius:var(--radius);padding:22px;color:var(--cream);margin-bottom:20px}
+  .acesso-header h2{font-family:'Playfair Display',serif;font-size:22px}
+  .acesso-header p{color:var(--toast);font-size:13px;margin-top:4px}
+  /* LINK BOX */
+  .link-box{background:var(--cream);border-radius:12px;padding:16px;border:1px solid var(--caramel);margin-top:16px}
+  .link-box-title{font-size:13px;font-weight:600;color:var(--chocolate);margin-bottom:10px}
+  .link-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .link-hint{font-size:11px;color:var(--text-muted);margin-top:6px}
+  @media(max-width:600px){.form-grid{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}.ponto-grid{grid-template-columns:1fr}header{flex-direction:column;align-items:flex-start}.header-tabs{width:100%;overflow-x:auto}}
+  @media print{header,.header-tabs,.btn{display:none!important}.modal-overlay{position:static;background:none;display:block}.modal{box-shadow:none}}
+</style>
+</head>
+<body>
+
+<!-- PÁGINA DE ASSINATURA -->
+<div id="pg-assinar">
+  <div class="assinar-header"><h1>🍫 Consignado</h1><p>CONFIRMAÇÃO DE RECEBIMENTO</p></div>
+  <div class="assinar-body">
+    <div class="entrega-resumo" id="assinar-resumo"></div>
+    <div class="sig-wrap" id="sig-wrap">
+      <h3>✍️ Assine para confirmar o recebimento</h3>
+      <p class="sig-instrucao">Use o dedo (celular) ou mouse na área abaixo</p>
+      <canvas id="sig-canvas" width="460" height="200"></canvas>
+      <div class="sig-actions">
+        <button class="btn btn-outline btn-sm" onclick="limparAssinatura()">🗑 Limpar</button>
+        <button class="btn btn-green" onclick="confirmarAssinatura()">✅ Confirmar Recebimento</button>
+      </div>
+    </div>
+    <div id="assinar-ok" class="assinado-ok" style="display:none">
+      <span class="ok-icon">✅</span>
+      <h2>Recebimento Confirmado!</h2>
+      <p style="color:var(--text-muted);margin-top:8px;font-size:14px">Assinatura registrada com sucesso.<br>Pode fechar esta página.</p>
+    </div>
+  </div>
+</div>
+
+<!-- APP PRINCIPAL -->
+<div id="pg-app">
+<header>
+  <div class="brand"><span class="brand-icon">🍫</span><div><div class="brand-name">Consignado</div><div class="brand-sub">Gestão de Pontos de Venda</div></div></div>
+  <div class="header-tabs">
+    <button class="tab-btn active" onclick="showSection('dashboard')">📊 Painel</button>
+    <button class="tab-btn" onclick="showSection('pontos')">📍 Pontos</button>
+    <button class="tab-btn" onclick="showSection('produtos')">🧁 Produtos</button>
+    <button class="tab-btn" onclick="showSection('entregas')">🚚 Entregas</button>
+    <button class="tab-btn" onclick="showSection('acertos')">💰 Acertos</button>
+    <button class="tab-btn" onclick="showSection('acesso-ponto')">🔑 Acesso Ponto</button>
+  </div>
+</header>
+<div class="container">
+
+<!-- DASHBOARD -->
+<div id="sec-dashboard" class="section active">
+  <div id="alert-global"></div>
+  <div class="stats-grid" id="stats-grid"></div>
+  <div class="card"><div class="card-title">📋 Saldo por Ponto</div>
+    <div class="table-wrap"><table id="tabela-saldo">
+      <thead><tr><th>Ponto</th><th>Responsável</th><th>Consignado</th><th>A Receber</th><th>Assinatura</th><th>Status</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+  <div class="card" id="card-pedidos" style="display:none"><div class="card-title">🔔 Pedidos Pendentes</div>
+    <div class="table-wrap"><table id="tabela-pedidos-dash">
+      <thead><tr><th>Ponto</th><th>Produto</th><th>Qtd</th><th>Data</th><th>Obs</th><th>Ação</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- PONTOS -->
+<div id="sec-pontos" class="section">
+  <div class="card"><div class="card-title">➕ Cadastrar Ponto de Venda</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Nome do Ponto *</label><input type="text" id="ponto-nome" placeholder="Ex: Padaria Central"></div>
+      <div class="form-group"><label>Responsável *</label><input type="text" id="ponto-resp" placeholder="Nome do dono / contato"></div>
+      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="ponto-tel" placeholder="(99) 99999-9999"></div>
+      <div class="form-group"><label>Endereço</label><input type="text" id="ponto-end" placeholder="Rua, número, bairro"></div>
+      <div class="form-group"><label>Código de Acesso (4–6 dígitos)</label><input type="text" id="ponto-codigo" placeholder="Ex: 1234" maxlength="6"></div>
+    </div>
+    <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarPonto()">💾 Cadastrar Ponto</button></div>
+  </div>
+  <div class="ponto-grid" id="lista-pontos"></div>
+</div>
+
+<!-- PRODUTOS -->
+<div id="sec-produtos" class="section">
+  <div class="card"><div class="card-title">➕ Cadastrar Produto</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Nome *</label><input type="text" id="prod-nome" placeholder="Ex: Brownie Tradicional"></div>
+      <div class="form-group"><label>Categoria</label><select id="prod-cat"><option value="brownie">Brownie</option><option value="bolo">Bolo / Fatia</option><option value="docinho">Docinho</option><option value="outro">Outro</option></select></div>
+      <div class="form-group"><label>Preço (R$) *</label><input type="number" id="prod-preco" placeholder="0,00" step="0.01" min="0"></div>
+      <div class="form-group"><label>Unidade</label><select id="prod-unidade"><option>un</option><option>caixa</option><option>dúzia</option></select></div>
+      <div class="form-group"><label>Descrição</label><input type="text" id="prod-desc" placeholder="Ingredientes, sabor..."></div>
+    </div>
+    <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarProduto()">💾 Cadastrar Produto</button></div>
+  </div>
+  <div class="card"><div class="card-title">🧁 Produtos</div>
+    <div class="table-wrap"><table id="tabela-produtos">
+      <thead><tr><th>Produto</th><th>Categoria</th><th>Preço</th><th>Un.</th><th>Ações</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ENTREGAS -->
+<div id="sec-entregas" class="section">
+  <div class="card"><div class="card-title">🚚 Registrar Entrega Consignada</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Ponto *</label><select id="ent-ponto"></select></div>
+      <div class="form-group"><label>Produto *</label><select id="ent-produto" onchange="preencherPrecoEntrega()"></select></div>
+      <div class="form-group"><label>Quantidade *</label><input type="number" id="ent-qtd" placeholder="Ex: 20" min="1"></div>
+      <div class="form-group"><label>Preço Negociado (R$) *</label><input type="number" id="ent-preco" placeholder="0,00" step="0.01" min="0"></div>
+      <div class="form-group"><label>Data</label><input type="date" id="ent-data"></div>
+      <div class="form-group"><label>Observação</label><input type="text" id="ent-obs" placeholder="Opcional"></div>
+    </div>
+    <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarEntrega()">📦 Registrar e Gerar Link</button></div>
+    <div id="link-assinatura-box" class="link-box" style="display:none">
+      <div class="link-box-title">✅ Entrega registrada! Envie o link abaixo para o cliente assinar:</div>
+      <div class="link-row">
+        <input type="text" id="link-assinatura-input" readonly style="flex:1;min-width:180px;font-size:12px;background:#fff">
+        <button class="btn btn-outline btn-sm" onclick="copiarLink()">📋 Copiar</button>
+        <button class="btn btn-whatsapp btn-sm" onclick="enviarWhatsApp()">📱 WhatsApp</button>
+      </div>
+      <div class="link-hint">O cliente abre no celular, vê o que recebeu e assina com o dedo. A assinatura fica salva aqui.</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">📦 Histórico de Entregas</div>
+    <select id="filtro-ent-ponto" onchange="renderEntregas()" style="padding:7px 12px;border-radius:8px;border:1.5px solid var(--toast);margin-bottom:14px">
+      <option value="">Todos os pontos</option>
+    </select>
+    <div class="table-wrap"><table id="tabela-entregas">
+      <thead><tr><th>Data</th><th>Ponto</th><th>Produto</th><th>Qtd</th><th>Preço</th><th>Total</th><th>Assinatura</th><th>Status</th><th>Ações</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ACERTOS -->
+<div id="sec-acertos" class="section">
+  <div class="card"><div class="card-title">💰 Realizar Acerto</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Ponto *</label><select id="acerto-ponto" onchange="calcularAcerto()"></select></div>
+      <div class="form-group"><label>Data</label><input type="date" id="acerto-data"></div>
+      <div class="form-group"><label>Valor Recebido (R$)</label><input type="number" id="acerto-valor" placeholder="0,00" step="0.01"></div>
+      <div class="form-group"><label>Qtd Devolvida</label><input type="number" id="acerto-dev" placeholder="0" min="0"></div>
+      <div class="form-group"><label>Observação</label><input type="text" id="acerto-obs" placeholder="Opcional"></div>
+    </div>
+    <div id="acerto-resumo" style="background:var(--cream);border-radius:12px;padding:16px;margin-top:14px;font-size:14px;display:none"></div>
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-green" onclick="realizarAcerto()">✅ Registrar Acerto</button>
+      <button class="btn btn-gold" onclick="gerarReciboModal()">🧾 Ver Recibo</button>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">📜 Histórico de Acertos</div>
+    <div class="table-wrap"><table id="tabela-acertos">
+      <thead><tr><th>Data</th><th>Ponto</th><th>Devolvido</th><th>Recebido</th><th>Obs</th><th>Recibo</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ACESSO PONTO -->
+<div id="sec-acesso-ponto" class="section">
+  <div id="acesso-login">
+    <div class="card" style="max-width:380px;margin:0 auto">
+      <div class="card-title">🔑 Acesso do Ponto</div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Digite o código do seu ponto.</p>
+      <div class="form-group" style="margin-bottom:12px"><label>Código</label>
+        <input type="text" id="acesso-codigo" placeholder="Ex: 1234" maxlength="6" onkeydown="if(event.key==='Enter')entrarAcesso()"></div>
+      <button class="btn btn-primary" onclick="entrarAcesso()" style="width:100%;justify-content:center">Entrar →</button>
+      <div id="acesso-erro" style="margin-top:10px"></div>
+    </div>
+  </div>
+  <div id="acesso-dashboard" style="display:none">
+    <div class="acesso-header"><h2 id="acesso-nome-ponto"></h2><p id="acesso-resp-ponto"></p>
+      <button class="btn btn-outline btn-sm" onclick="sairAcesso()" style="margin-top:10px;border-color:var(--toast);color:var(--toast)">Sair</button></div>
+    <div class="stats-grid" id="acesso-stats"></div>
+    <div class="card"><div class="card-title">📦 Itens em Consignação</div>
+      <div class="table-wrap"><table id="acesso-tabela-items">
+        <thead><tr><th>Produto</th><th>Qtd</th><th>Preço Unit</th><th>Total</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="card"><div class="card-title">🛒 Solicitar Reposição</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Produto</label><select id="acesso-prod-pedido"></select></div>
+        <div class="form-group"><label>Quantidade</label><input type="number" id="acesso-qtd-pedido" placeholder="Ex: 20" min="1"></div>
+        <div class="form-group"><label>Observação</label><input type="text" id="acesso-obs-pedido" placeholder="Horário preferido..."></div>
+      </div>
+      <div style="margin-top:14px"><button class="btn btn-gold" onclick="fazerPedido()">📩 Enviar Solicitação</button></div>
+    </div>
+    <div class="card"><div class="card-title">📜 Acertos</div>
+      <div class="table-wrap"><table id="acesso-acertos">
+        <thead><tr><th>Data</th><th>Valor Pago</th><th>Devolvido</th><th>Obs</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="card"><div class="card-title">🔔 Pedidos Enviados</div>
+      <div id="acesso-pedidos-lista" style="font-size:13px;color:var(--text-muted)">Nenhum pedido.</div>
+    </div>
+  </div>
+</div>
+
+</div></div>
+
+<!-- MODAIS -->
+<div class="modal-overlay" id="modal-recibo">
+  <div class="modal"><button class="modal-close" onclick="fecharModal('modal-recibo')">✕</button>
+    <div class="modal-title">🧾 Recibo de Quitação</div><div id="recibo-content"></div>
+    <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="imprimirRecibo()">🖨️ Imprimir / PDF</button>
+      <button class="btn btn-outline" onclick="fecharModal('modal-recibo')">Fechar</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-ver-assinatura">
+  <div class="modal" style="max-width:520px"><button class="modal-close" onclick="fecharModal('modal-ver-assinatura')">✕</button>
+    <div class="modal-title">✍️ Assinatura do Recebimento</div><div id="ver-assinatura-content"></div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-editar-ent">
+  <div class="modal"><button class="modal-close" onclick="fecharModal('modal-editar-ent')">✕</button>
+    <div class="modal-title">✏️ Editar Entrega</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Quantidade</label><input type="number" id="edit-qtd" min="1"></div>
+      <div class="form-group"><label>Preço</label><input type="number" id="edit-preco" step="0.01"></div>
+    </div>
+    <input type="hidden" id="edit-id">
+    <div style="margin-top:16px"><button class="btn btn-primary" onclick="confirmarEdicao()">💾 Salvar</button></div>
+  </div>
+</div>
+
+<script>
+const KEYS={pontos:'cons_pontos',produtos:'cons_produtos',entregas:'cons_entregas',acertos:'cons_acertos',pedidos:'cons_pedidos'};
+function load(k){try{return JSON.parse(localStorage.getItem(k))||[];}catch{return[];}}
+function save(k,v){localStorage.setItem(k,JSON.stringify(v));}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+function fmtMoeda(v){return'R$ '+(+v).toFixed(2).replace('.',',');}
+function fmtData(d){if(!d)return'—';const p=d.split('-');return`${p[2]}/${p[1]}/${p[0]}`;}
+function hoje(){return new Date().toISOString().slice(0,10);}
+
+// ── ROTEAMENTO ──
+function rotear(){
+  const p=new URLSearchParams(location.search);
+  const id=p.get('assinar');
+  if(id){document.getElementById('pg-app').style.display='none';document.getElementById('pg-assinar').style.display='block';iniciarAssinatura(id);}
+}
+
+// ── ASSINATURA ──
+let sigCtx=null,sigDesenhando=false,sigEntregaId=null;
+function iniciarAssinatura(id){
+  sigEntregaId=id;
+  const e=load(KEYS.entregas).find(x=>x.id===id);
+  const resumoEl=document.getElementById('assinar-resumo');
+  if(!e){resumoEl.innerHTML='<div class="alert alert-error">Entrega não encontrada.</div>';document.getElementById('sig-wrap').style.display='none';return;}
+  if(e.assinatura){
+    document.getElementById('sig-wrap').style.display='none';
+    document.getElementById('assinar-ok').style.display='block';
+    resumoEl.innerHTML=gerarResumoHTML(e)+`<br><img src="${e.assinatura}" style="border:1px solid var(--toast);border-radius:8px;max-width:100%;margin-top:10px"><br><small style="color:var(--green-ok)">✅ Já assinado em ${fmtData(e.dataAssinatura)}</small>`;
+    return;
+  }
+  resumoEl.innerHTML=gerarResumoHTML(e);
+  setupCanvas();
+}
+function gerarResumoHTML(e){
+  return`<h3>Detalhes da Entrega</h3>
+    <div class="resumo-item"><span>📍 Ponto</span><strong>${e.pontoNome}</strong></div>
+    <div class="resumo-item"><span>🧁 Produto</span><strong>${e.prodNome}</strong></div>
+    <div class="resumo-item"><span>📦 Quantidade</span><strong>${e.qtd} unidades</strong></div>
+    <div class="resumo-item"><span>💰 Preço unit.</span><strong>${fmtMoeda(e.preco)}</strong></div>
+    <div class="resumo-item"><span>💵 Total</span><strong style="color:var(--green-ok)">${fmtMoeda(e.qtd*e.preco)}</strong></div>
+    <div class="resumo-item"><span>📅 Data</span><strong>${fmtData(e.data)}</strong></div>
+    ${e.obs?`<div class="resumo-item"><span>📝 Obs</span><span>${e.obs}</span></div>`:''}`;
+}
+function setupCanvas(){
+  const canvas=document.getElementById('sig-canvas');
+  const ratio=window.devicePixelRatio||1;
+  const w=Math.min(canvas.parentElement.clientWidth-40,460);
+  canvas.style.width=w+'px';canvas.style.height='200px';
+  canvas.width=w*ratio;canvas.height=200*ratio;
+  sigCtx=canvas.getContext('2d');
+  sigCtx.scale(ratio,ratio);
+  sigCtx.strokeStyle='#1e0f05';sigCtx.lineWidth=2.5;sigCtx.lineCap='round';sigCtx.lineJoin='round';
+  function pos(e,canvas){const r=canvas.getBoundingClientRect();const src=e.touches?e.touches[0]:e;return[src.clientX-r.left,src.clientY-r.top];}
+  canvas.addEventListener('touchstart',e=>{e.preventDefault();sigDesenhando=true;const[x,y]=pos(e,canvas);sigCtx.beginPath();sigCtx.moveTo(x,y);},{passive:false});
+  canvas.addEventListener('touchmove',e=>{e.preventDefault();if(!sigDesenhando)return;const[x,y]=pos(e,canvas);sigCtx.lineTo(x,y);sigCtx.stroke();},{passive:false});
+  canvas.addEventListener('touchend',()=>{sigDesenhando=false;});
+  canvas.addEventListener('mousedown',e=>{sigDesenhando=true;const[x,y]=pos(e,canvas);sigCtx.beginPath();sigCtx.moveTo(x,y);});
+  canvas.addEventListener('mousemove',e=>{if(!sigDesenhando)return;const[x,y]=pos(e,canvas);sigCtx.lineTo(x,y);sigCtx.stroke();});
+  canvas.addEventListener('mouseup',()=>sigDesenhando=false);
+  canvas.addEventListener('mouseleave',()=>sigDesenhando=false);
+}
+function limparAssinatura(){if(sigCtx){const c=document.getElementById('sig-canvas');sigCtx.clearRect(0,0,c.width,c.height);}}
+function canvasVazio(){const c=document.getElementById('sig-canvas');if(!sigCtx)return true;return!sigCtx.getImageData(0,0,c.width,c.height).data.some(v=>v!==0);}
+function confirmarAssinatura(){
+  if(canvasVazio()){alert('Por favor, assine antes de confirmar.');return;}
+  const imgData=document.getElementById('sig-canvas').toDataURL('image/png');
+  const entregas=load(KEYS.entregas).map(e=>e.id===sigEntregaId?{...e,assinatura:imgData,dataAssinatura:hoje()}:e);
+  save(KEYS.entregas,entregas);
+  document.getElementById('sig-wrap').style.display='none';
+  document.getElementById('assinar-ok').style.display='block';
+}
+
+// ── LINK ──
+let ultimaEntregaId=null;
+function gerarLink(id){return location.href.split('?')[0]+'?assinar='+id;}
+function mostrarLinkAssinatura(id){
+  ultimaEntregaId=id;
+  document.getElementById('link-assinatura-input').value=gerarLink(id);
+  document.getElementById('link-assinatura-box').style.display='block';
+  setTimeout(()=>document.getElementById('link-assinatura-box').scrollIntoView({behavior:'smooth',block:'nearest'}),100);
+}
+function copiarLink(){
+  const inp=document.getElementById('link-assinatura-input');
+  inp.select();inp.setSelectionRange(0,9999);
+  navigator.clipboard.writeText(inp.value).then(()=>alert('Link copiado! ✅')).catch(()=>{document.execCommand('copy');alert('Link copiado! ✅');});
+}
+function enviarWhatsApp(){
+  const link=document.getElementById('link-assinatura-input').value;
+  const e=load(KEYS.entregas).find(x=>x.id===ultimaEntregaId);
+  const ponto=load(KEYS.pontos).find(p=>e&&p.id===e.pontoId);
+  const tel=(ponto?.tel||'').replace(/\D/g,'');
+  const msg=encodeURIComponent(`Olá ${ponto?.resp||''}! 🍫 Segue o link para confirmar o recebimento de *${e?.qtd} ${e?.prodNome}* no valor de ${e?fmtMoeda(e.qtd*e.preco):''}:\n\n${link}`);
+  window.open(tel?`https://wa.me/55${tel}?text=${msg}`:`https://wa.me/?text=${msg}`,'_blank');
+}
+
+// ── NAV ──
+function showSection(id){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  const map={dashboard:0,pontos:1,produtos:2,entregas:3,acertos:4,'acesso-ponto':5};
+  document.querySelectorAll('.tab-btn')[map[id]]?.classList.add('active');
+  if(id==='dashboard')renderDashboard();
+  if(id==='pontos')renderPontos();
+  if(id==='produtos')renderProdutos();
+  if(id==='entregas'){popularSelectPontos('ent-ponto');popularSelectPontos('filtro-ent-ponto',true);popularSelectProdutos('ent-produto');renderEntregas();}
+  if(id==='acertos'){popularSelectPontos('acerto-ponto');renderAcertos();}
+}
+
+// ── PONTOS ──
+function salvarPonto(){
+  const nome=document.getElementById('ponto-nome').value.trim();
+  const resp=document.getElementById('ponto-resp').value.trim();
+  if(!nome||!resp)return alert('Preencha Nome e Responsável.');
+  const codigo=document.getElementById('ponto-codigo').value.trim();
+  if(codigo&&codigo.length<4)return alert('Código deve ter ao menos 4 caracteres.');
+  const pontos=load(KEYS.pontos);
+  if(codigo&&pontos.find(p=>p.codigo===codigo))return alert('Código já existe.');
+  pontos.push({id:uid(),nome,resp,tel:document.getElementById('ponto-tel').value.trim(),end:document.getElementById('ponto-end').value.trim(),codigo,criadoEm:hoje()});
+  save(KEYS.pontos,pontos);
+  ['ponto-nome','ponto-resp','ponto-tel','ponto-end','ponto-codigo'].forEach(id=>document.getElementById(id).value='');
+  renderPontos();showAlert('Ponto cadastrado! ✅','success');
+}
+function renderPontos(){
+  const pontos=load(KEYS.pontos);
+  const el=document.getElementById('lista-pontos');
+  if(!pontos.length){el.innerHTML='<p style="color:var(--text-muted)">Nenhum ponto cadastrado.</p>';return;}
+  const entregas=load(KEYS.entregas);
+  el.innerHTML=pontos.map(p=>{
+    const ents=entregas.filter(e=>e.pontoId===p.id&&e.status==='ativo');
+    const ti=ents.reduce((a,e)=>a+e.qtd,0);
+    const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
+    return`<div class="ponto-card">
+      <div class="ponto-nome">${p.nome}</div>
+      <div class="ponto-resp">👤 ${p.resp}${p.tel?' · 📱 '+p.tel:''}</div>
+      ${p.end?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">📍 ${p.end}</div>`:''}
+      <div class="ponto-saldo"><span>Consignado:</span><strong>${ti} itens</strong></div>
+      <div class="ponto-saldo"><span>A receber:</span><strong style="color:var(--green-ok)">${fmtMoeda(tv)}</strong></div>
+      ${p.codigo?`<div class="ponto-saldo"><span>Código:</span><span class="badge badge-gold">${p.codigo}</span></div>`:''}
+      <div class="ponto-actions">
+        <button class="btn btn-outline btn-sm" onclick="showSection('entregas');setTimeout(()=>{document.getElementById('ent-ponto').value='${p.id}'},200)">🚚 Entregar</button>
+        <button class="btn btn-danger btn-sm" onclick="excluirPonto('${p.id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function excluirPonto(id){if(!confirm('Excluir este ponto?'))return;save(KEYS.pontos,load(KEYS.pontos).filter(p=>p.id!==id));renderPontos();}
+
+// ── PRODUTOS ──
+function salvarProduto(){
+  const nome=document.getElementById('prod-nome').value.trim();
+  const preco=parseFloat(document.getElementById('prod-preco').value);
+  if(!nome||!preco)return alert('Preencha Nome e Preço.');
+  const produtos=load(KEYS.produtos);
+  produtos.push({id:uid(),nome,cat:document.getElementById('prod-cat').value,preco,unidade:document.getElementById('prod-unidade').value,desc:document.getElementById('prod-desc').value.trim()});
+  save(KEYS.produtos,produtos);
+  ['prod-nome','prod-preco','prod-desc'].forEach(id=>document.getElementById(id).value='');
+  renderProdutos();showAlert('Produto cadastrado! ✅','success');
+}
+function renderProdutos(){
+  const p=load(KEYS.produtos);
+  const tb=document.querySelector('#tabela-produtos tbody');
+  if(!p.length){tb.innerHTML='<tr><td colspan="5" style="color:var(--text-muted);text-align:center">Nenhum produto.</td></tr>';return;}
+  tb.innerHTML=p.map(x=>`<tr><td><strong>${x.nome}</strong>${x.desc?'<br><small style="color:var(--text-muted)">'+x.desc+'</small>':''}</td><td>${x.cat}</td><td>${fmtMoeda(x.preco)}</td><td>${x.unidade}</td><td><button class="btn btn-danger btn-sm" onclick="excluirProduto('${x.id}')">🗑</button></td></tr>`).join('');
+}
+function excluirProduto(id){if(!confirm('Excluir?'))return;save(KEYS.produtos,load(KEYS.produtos).filter(p=>p.id!==id));renderProdutos();}
+
+// ── SELECTS ──
+function popularSelectPontos(elId,comTodos=false){
+  const el=document.getElementById(elId);if(!el)return;
+  el.innerHTML=(comTodos?'<option value="">Todos os pontos</option>':'<option value="">Selecione...</option>')+
+    load(KEYS.pontos).map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
+}
+function popularSelectProdutos(elId){
+  const el=document.getElementById(elId);if(!el)return;
+  el.innerHTML='<option value="">Selecione...</option>'+
+    load(KEYS.produtos).map(p=>`<option value="${p.id}" data-preco="${p.preco}">${p.nome} — ${fmtMoeda(p.preco)}</option>`).join('');
+}
+function preencherPrecoEntrega(){
+  const sel=document.getElementById('ent-produto');
+  const opt=sel.options[sel.selectedIndex];
+  if(opt?.dataset?.preco)document.getElementById('ent-preco').value=opt.dataset.preco;
+}
+
+// ── ENTREGAS ──
+function salvarEntrega(){
+  const pontoId=document.getElementById('ent-ponto').value;
+  const prodId=document.getElementById('ent-produto').value;
+  const qtd=parseInt(document.getElementById('ent-qtd').value);
+  const preco=parseFloat(document.getElementById('ent-preco').value);
+  const data=document.getElementById('ent-data').value||hoje();
+  const obs=document.getElementById('ent-obs').value.trim();
+  if(!pontoId||!prodId||!qtd||!preco)return alert('Preencha todos os campos obrigatórios.');
+  const ponto=load(KEYS.pontos).find(p=>p.id===pontoId);
+  const produto=load(KEYS.produtos).find(p=>p.id===prodId);
+  const novaId=uid();
+  const entregas=load(KEYS.entregas);
+  entregas.push({id:novaId,pontoId,prodId,pontoNome:ponto.nome,prodNome:produto.nome,qtd,preco,data,obs,status:'ativo',assinatura:null,dataAssinatura:null});
+  save(KEYS.entregas,entregas);
+  ['ent-qtd','ent-preco','ent-obs'].forEach(id=>document.getElementById(id).value='');
+  renderEntregas();
+  mostrarLinkAssinatura(novaId);
+  showAlert(`Entrega registrada! Copie o link abaixo e envie para ${ponto.nome} assinar. 🚚`,'success');
+}
+function renderEntregas(){
+  const filtro=document.getElementById('filtro-ent-ponto')?.value||'';
+  let entregas=load(KEYS.entregas);
+  if(filtro)entregas=entregas.filter(e=>e.pontoId===filtro);
+  entregas=entregas.slice().reverse();
+  const tb=document.querySelector('#tabela-entregas tbody');
+  if(!entregas.length){tb.innerHTML='<tr><td colspan="9" style="color:var(--text-muted);text-align:center">Nenhuma entrega.</td></tr>';return;}
+  tb.innerHTML=entregas.map(e=>`<tr>
+    <td>${fmtData(e.data)}</td><td>${e.pontoNome}</td><td>${e.prodNome}</td>
+    <td><strong>${e.qtd}</strong></td><td>${fmtMoeda(e.preco)}</td><td>${fmtMoeda(e.qtd*e.preco)}</td>
+    <td style="text-align:center">${e.assinatura
+      ?`<span class="badge badge-green" style="cursor:pointer" onclick="verAssinatura('${e.id}')">✅ Ver</span>`
+      :`<span class="badge badge-red" style="display:block;margin-bottom:4px">Pendente</span>
+       <button class="btn btn-outline btn-sm" onclick="mostrarLinkAssinatura('${e.id}')">🔗 Link</button>`}
+    </td>
+    <td><span class="badge ${e.status==='ativo'?'badge-gold':'badge-green'}">${e.status==='ativo'?'Consignado':'Quitado'}</span></td>
+    <td style="display:flex;gap:4px;flex-wrap:wrap">
+      ${e.status==='ativo'?`<button class="btn btn-outline btn-sm" onclick="editarEntrega('${e.id}')">✏️</button>`:''}
+      <button class="btn btn-danger btn-sm" onclick="excluirEntrega('${e.id}')">🗑</button>
+    </td>
+  </tr>`).join('');
+}
+function verAssinatura(id){
+  const e=load(KEYS.entregas).find(x=>x.id===id);if(!e||!e.assinatura)return;
+  document.getElementById('ver-assinatura-content').innerHTML=`
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">📍 ${e.pontoNome} · ${fmtData(e.dataAssinatura||e.data)}</p>
+    <img src="${e.assinatura}" style="border:2px solid var(--toast);border-radius:10px;width:100%;background:#fff">
+    <p style="margin-top:10px;font-size:14px"><strong>${e.qtd} ${e.prodNome}</strong> — ${fmtMoeda(e.qtd*e.preco)}</p>`;
+  document.getElementById('modal-ver-assinatura').classList.add('open');
+}
+function editarEntrega(id){
+  const e=load(KEYS.entregas).find(x=>x.id===id);if(!e)return;
+  document.getElementById('edit-id').value=id;document.getElementById('edit-qtd').value=e.qtd;document.getElementById('edit-preco').value=e.preco;
+  document.getElementById('modal-editar-ent').classList.add('open');
+}
+function confirmarEdicao(){
+  const id=document.getElementById('edit-id').value;
+  save(KEYS.entregas,load(KEYS.entregas).map(e=>e.id===id?{...e,qtd:parseInt(document.getElementById('edit-qtd').value),preco:parseFloat(document.getElementById('edit-preco').value)}:e));
+  fecharModal('modal-editar-ent');renderEntregas();
+}
+function excluirEntrega(id){if(!confirm('Excluir?'))return;save(KEYS.entregas,load(KEYS.entregas).filter(e=>e.id!==id));renderEntregas();}
+
+// ── ACERTOS ──
+function calcularAcerto(){
+  const pontoId=document.getElementById('acerto-ponto').value;
+  if(!pontoId){document.getElementById('acerto-resumo').style.display='none';return;}
+  const ents=load(KEYS.entregas).filter(e=>e.pontoId===pontoId&&e.status==='ativo');
+  const ti=ents.reduce((a,e)=>a+e.qtd,0);const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
+  const r=document.getElementById('acerto-resumo');r.style.display='block';
+  r.innerHTML=`<strong>Em aberto</strong><br>Itens: <strong>${ti}</strong> · Total: <strong style="color:var(--green-ok)">${fmtMoeda(tv)}</strong>${ents.map(e=>`<br>— ${e.prodNome}: ${e.qtd}×${fmtMoeda(e.preco)} = ${fmtMoeda(e.qtd*e.preco)}`).join('')}`;
+}
+function realizarAcerto(){
+  const pontoId=document.getElementById('acerto-ponto').value;
+  const valor=parseFloat(document.getElementById('acerto-valor').value)||0;
+  const dev=parseInt(document.getElementById('acerto-dev').value)||0;
+  const data=document.getElementById('acerto-data').value||hoje();
+  const obs=document.getElementById('acerto-obs').value.trim();
+  if(!pontoId)return alert('Selecione o ponto.');
+  if(!valor&&!dev)return alert('Informe valor recebido ou qtd devolvida.');
+  const ponto=load(KEYS.pontos).find(p=>p.id===pontoId);
+  const entregas=load(KEYS.entregas);
+  let devR=dev;
+  const ents=entregas.filter(e=>e.pontoId===pontoId&&e.status==='ativo');
+  ents.forEach(e=>{if(devR>=e.qtd){e.status='quitado';devR-=e.qtd;}else if(devR>0){e.qtd-=devR;devR=0;}});
+  const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
+  if(valor>=tv&&valor>0)ents.forEach(e=>{if(e.status!=='quitado')e.status='quitado';});
+  save(KEYS.entregas,entregas.map(e=>{const f=ents.find(x=>x.id===e.id);return f||e;}));
+  const acertos=load(KEYS.acertos);
+  acertos.push({id:uid(),pontoId,pontoNome:ponto.nome,valor,dev,data,obs});
+  save(KEYS.acertos,acertos);
+  ['acerto-valor','acerto-dev','acerto-obs'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('acerto-resumo').style.display='none';
+  renderAcertos();showAlert(`Acerto de ${fmtMoeda(valor)} registrado para ${ponto.nome}! 💰`,'success');
+}
+function renderAcertos(){
+  const a=load(KEYS.acertos).slice().reverse();
+  const tb=document.querySelector('#tabela-acertos tbody');
+  if(!a.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--text-muted);text-align:center">Nenhum acerto.</td></tr>';return;}
+  tb.innerHTML=a.map(x=>`<tr><td>${fmtData(x.data)}</td><td>${x.pontoNome}</td><td>${x.dev||0} un</td><td style="color:var(--green-ok);font-weight:700">${fmtMoeda(x.valor)}</td><td>${x.obs||'—'}</td><td><button class="btn btn-gold btn-sm" onclick="verReciboAcerto('${x.id}')">🧾</button></td></tr>`).join('');
+}
+
+// ── RECIBO ──
+function gerarReciboModal(){
+  const pontoId=document.getElementById('acerto-ponto').value;
+  if(!pontoId)return alert('Selecione o ponto.');
+  const ponto=load(KEYS.pontos).find(p=>p.id===pontoId);
+  const entregas=load(KEYS.entregas).filter(e=>e.pontoId===pontoId&&e.status==='ativo');
+  mostrarRecibo({ponto,valor:parseFloat(document.getElementById('acerto-valor').value)||0,dev:parseInt(document.getElementById('acerto-dev').value)||0,data:document.getElementById('acerto-data').value||hoje(),obs:document.getElementById('acerto-obs').value.trim(),entregas,id:'PREV-'+Date.now()});
+}
+function verReciboAcerto(id){
+  const a=load(KEYS.acertos).find(x=>x.id===id);if(!a)return;
+  const ponto=load(KEYS.pontos).find(p=>p.id===a.pontoId)||{nome:a.pontoNome,resp:'—'};
+  mostrarRecibo({ponto,valor:a.valor,dev:a.dev,data:a.data,obs:a.obs,entregas:[],id:a.id.toUpperCase()});
+}
+function mostrarRecibo({ponto,valor,dev,data,obs,entregas,id}){
+  const tv=entregas.reduce((a,e)=>a+(e.qtd*e.preco),0);
+  const itensHtml=entregas.length?entregas.map(e=>`<div class="recibo-linha"><span>${e.prodNome} (${e.qtd} un)</span><span>${fmtMoeda(e.qtd*e.preco)}</span></div>`).join(''):'<div class="recibo-linha"><span>Itens quitados</span><span>—</span></div>';
+  document.getElementById('recibo-content').innerHTML=`<div class="recibo-box" id="recibo-printable">
+    <div class="recibo-logo">🍫 Consignado</div><div class="recibo-sub">RECIBO DE QUITAÇÃO</div>
+    <div class="recibo-linha"><span>Nº</span><span>${id}</span></div>
+    <div class="recibo-linha"><span>Data</span><span>${fmtData(data)}</span></div>
+    <div class="recibo-linha"><span>Ponto</span><span><strong>${ponto.nome}</strong></span></div>
+    <div class="recibo-linha"><span>Responsável</span><span>${ponto.resp||'—'}</span></div>
+    <hr style="border:none;border-top:1px dotted var(--caramel);margin:10px 0">
+    ${itensHtml}
+    ${tv>0?`<div class="recibo-linha"><span>Total em aberto</span><span>${fmtMoeda(tv)}</span></div>`:''}
+    ${dev>0?`<div class="recibo-linha"><span>Devoluções</span><span>${dev} un</span></div>`:''}
+    ${obs?`<div class="recibo-linha"><span>Obs</span><span>${obs}</span></div>`:''}
+    <div class="recibo-linha recibo-total"><span>VALOR RECEBIDO</span><span>${fmtMoeda(valor)}</span></div>
+    <div class="recibo-assin"><div><div class="assin-line">Fornecedor</div></div><div><div class="assin-line">Responsável pelo Ponto</div></div></div>
+    <div style="text-align:center;margin-top:16px;font-size:10px;color:var(--text-muted)">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+  </div>`;
+  document.getElementById('modal-recibo').classList.add('open');
+}
+function imprimirRecibo(){
+  const j=window.open('','_blank');
+  j.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;600&display=swap" rel="stylesheet"><style>body{font-family:'DM Sans',sans-serif;background:#fff;padding:30px}.recibo-box{border:2px dashed #c47b2b;border-radius:14px;padding:28px;max-width:480px;margin:0 auto}.recibo-logo{font-family:'Playfair Display',serif;font-size:22px;color:#3b1f0a;text-align:center;margin-bottom:4px}.recibo-sub{text-align:center;color:#7a5c42;font-size:11px;letter-spacing:2px;margin-bottom:16px}.recibo-linha{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dotted #e8d5b7;font-size:13px}.recibo-total{font-weight:700;font-size:16px;color:#2d6a4f;margin-top:10px;padding-top:10px;border-top:2px solid #c47b2b}.recibo-assin{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px;text-align:center}.assin-line{border-top:1.5px solid #333;padding-top:4px;font-size:11px;color:#7a5c42}</style></head><body>${document.getElementById('recibo-printable').outerHTML}</body></html>`);
+  j.document.close();setTimeout(()=>j.print(),400);
+}
+
+// ── DASHBOARD ──
+function renderDashboard(){
+  const pontos=load(KEYS.pontos);
+  const entregas=load(KEYS.entregas).filter(e=>e.status==='ativo');
+  const acertos=load(KEYS.acertos);
+  const pedidos=load(KEYS.pedidos);
+  const ti=entregas.reduce((a,e)=>a+e.qtd,0);
+  const tv=entregas.reduce((a,e)=>a+(e.qtd*e.preco),0);
+  const trec=acertos.reduce((a,x)=>a+x.valor,0);
+  const semSig=entregas.filter(e=>!e.assinatura).length;
+  document.getElementById('stats-grid').innerHTML=`
+    <div class="stat-card"><div class="stat-label">Pontos Ativos</div><div class="stat-value">${pontos.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Itens Consignados</div><div class="stat-value">${ti}</div></div>
+    <div class="stat-card"><div class="stat-label">A Receber</div><div class="stat-value money">${fmtMoeda(tv)}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Recebido</div><div class="stat-value money">${fmtMoeda(trec)}</div></div>
+    ${semSig>0?`<div class="stat-card"><div class="stat-label">Sem Assinatura</div><div class="stat-value alert">${semSig}</div></div>`:''}
+  `;
+  const tb=document.querySelector('#tabela-saldo tbody');
+  if(!pontos.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--text-muted);text-align:center;padding:20px">Cadastre pontos para começar.</td></tr>';return;}
+  tb.innerHTML=pontos.map(p=>{
+    const ents=load(KEYS.entregas).filter(e=>e.pontoId===p.id&&e.status==='ativo');
+    const it=ents.reduce((a,e)=>a+e.qtd,0);const vl=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
+    const assin=ents.filter(e=>e.assinatura).length;
+    const sigB=ents.length===0?'—':assin===ents.length?`<span class="badge badge-green">✅ ${assin}/${ents.length}</span>`:`<span class="badge badge-red">⚠ ${assin}/${ents.length}</span>`;
+    const st=vl===0?'<span class="badge badge-green">Zerado</span>':vl>100?'<span class="badge badge-red">⚠ Cobrar</span>':'<span class="badge badge-gold">Em andamento</span>';
+    return`<tr><td><strong>${p.nome}</strong></td><td>${p.resp}</td><td>${it}</td><td style="color:var(--green-ok);font-weight:700">${fmtMoeda(vl)}</td><td>${sigB}</td><td>${st}</td></tr>`;
+  }).join('');
+  const pends=pedidos.filter(p=>p.status==='pendente');
+  const cp=document.getElementById('card-pedidos');
+  if(pends.length){
+    cp.style.display='block';
+    document.querySelector('#tabela-pedidos-dash tbody').innerHTML=pends.map(p=>`<tr><td>${p.pontoNome}</td><td>${p.prodNome}</td><td>${p.qtd}</td><td>${fmtData(p.data)}</td><td>${p.obs||'—'}</td><td><button class="btn btn-green btn-sm" onclick="atenderPedido('${p.id}')">✅ Atendido</button></td></tr>`).join('');
+    showAlert(`📩 ${pends.length} pedido(s) pendente(s)!`,'success');
+  } else cp.style.display='none';
+}
+function atenderPedido(id){save(KEYS.pedidos,load(KEYS.pedidos).map(p=>p.id===id?{...p,status:'atendido'}:p));renderDashboard();}
+
+// ── ACESSO PONTO ──
+let pontoLogado=null;
+function entrarAcesso(){
+  const codigo=document.getElementById('acesso-codigo').value.trim();
+  const ponto=load(KEYS.pontos).find(p=>p.codigo===codigo);
+  if(!ponto){document.getElementById('acesso-erro').innerHTML='<div class="alert alert-error">Código inválido.</div>';return;}
+  pontoLogado=ponto;
+  document.getElementById('acesso-login').style.display='none';
+  document.getElementById('acesso-dashboard').style.display='block';
+  document.getElementById('acesso-nome-ponto').textContent=ponto.nome;
+  document.getElementById('acesso-resp-ponto').textContent='👤 '+ponto.resp;
+  renderAcessoDashboard();
+}
+function sairAcesso(){pontoLogado=null;document.getElementById('acesso-login').style.display='block';document.getElementById('acesso-dashboard').style.display='none';document.getElementById('acesso-codigo').value='';document.getElementById('acesso-erro').innerHTML='';}
+function renderAcessoDashboard(){
+  if(!pontoLogado)return;
+  const ents=load(KEYS.entregas).filter(e=>e.pontoId===pontoLogado.id&&e.status==='ativo');
+  const ti=ents.reduce((a,e)=>a+e.qtd,0);const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
+  document.getElementById('acesso-stats').innerHTML=`<div class="stat-card"><div class="stat-label">Itens com você</div><div class="stat-value">${ti}</div></div><div class="stat-card"><div class="stat-label">Valor em aberto</div><div class="stat-value alert">${fmtMoeda(tv)}</div></div>`;
+  const tb=document.querySelector('#acesso-tabela-items tbody');
+  if(!ents.length)tb.innerHTML='<tr><td colspan="4" style="color:var(--text-muted);text-align:center">Nenhum item.</td></tr>';
+  else{
+    const map={};ents.forEach(e=>{if(!map[e.prodNome])map[e.prodNome]={qtd:0,preco:e.preco};map[e.prodNome].qtd+=e.qtd;});
+    tb.innerHTML=Object.entries(map).map(([n,v])=>`<tr><td>${n}</td><td><strong>${v.qtd}</strong></td><td>${fmtMoeda(v.preco)}</td><td style="color:var(--green-ok);font-weight:700">${fmtMoeda(v.qtd*v.preco)}</td></tr>`).join('');
+  }
+  popularSelectProdutos('acesso-prod-pedido');
+  const ac=load(KEYS.acertos).filter(a=>a.pontoId===pontoLogado.id).slice().reverse();
+  const tbAc=document.querySelector('#acesso-acertos tbody');
+  if(!ac.length)tbAc.innerHTML='<tr><td colspan="4" style="color:var(--text-muted);text-align:center">Nenhum acerto.</td></tr>';
+  else tbAc.innerHTML=ac.map(a=>`<tr><td>${fmtData(a.data)}</td><td style="color:var(--green-ok);font-weight:700">${fmtMoeda(a.valor)}</td><td>${a.dev||0} un</td><td>${a.obs||'—'}</td></tr>`).join('');
+  renderPedidosPonto();
+}
+function fazerPedido(){
+  if(!pontoLogado)return;
+  const prodId=document.getElementById('acesso-prod-pedido').value;
+  const qtd=parseInt(document.getElementById('acesso-qtd-pedido').value);
+  const obs=document.getElementById('acesso-obs-pedido').value.trim();
+  if(!prodId||!qtd)return alert('Selecione produto e quantidade.');
+  const produto=load(KEYS.produtos).find(p=>p.id===prodId);
+  const pedidos=load(KEYS.pedidos);
+  pedidos.push({id:uid(),pontoId:pontoLogado.id,pontoNome:pontoLogado.nome,prodId,prodNome:produto.nome,qtd,obs,data:hoje(),status:'pendente'});
+  save(KEYS.pedidos,pedidos);
+  document.getElementById('acesso-qtd-pedido').value='';document.getElementById('acesso-obs-pedido').value='';
+  renderPedidosPonto();alert(`✅ Pedido de ${qtd} ${produto.nome} enviado!`);
+}
+function renderPedidosPonto(){
+  if(!pontoLogado)return;
+  const pedidos=load(KEYS.pedidos).filter(p=>p.pontoId===pontoLogado.id).slice().reverse();
+  const el=document.getElementById('acesso-pedidos-lista');
+  if(!pedidos.length){el.innerHTML='Nenhum pedido enviado.';return;}
+  el.innerHTML=pedidos.map(p=>`<div style="padding:8px 0;border-bottom:1px solid var(--toast)">📩 <strong>${p.qtd} ${p.prodNome}</strong> — ${fmtData(p.data)} <span class="badge ${p.status==='pendente'?'badge-gold':'badge-green'}">${p.status}</span>${p.obs?`<br><small style="color:var(--text-muted)">${p.obs}</small>`:''}</div>`).join('');
+}
+
+// ── HELPERS ──
+function fecharModal(id){document.getElementById(id).classList.remove('open');}
+function showAlert(msg,tipo){const el=document.getElementById('alert-global');if(!el)return;el.innerHTML=`<div class="alert alert-${tipo==='success'?'success':'error'}">${msg}</div>`;setTimeout(()=>el.innerHTML='',4000);}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+document.getElementById('ent-data').value=hoje();
+document.getElementById('acerto-data').value=hoje();
+
+// Seed demo
+if(!load(KEYS.produtos).length){
+  const p=load(KEYS.produtos);
+  p.push({id:uid(),nome:'Brownie Tradicional',cat:'brownie',preco:7.00,unidade:'un',desc:'Chocolate meio amargo'});
+  p.push({id:uid(),nome:'Brownie Recheado',cat:'brownie',preco:9.00,unidade:'un',desc:'Com doce de leite'});
+  save(KEYS.produtos,p);
+}
+
+rotear();
+renderDashboard();
+</script>
+</body>
+</html>
