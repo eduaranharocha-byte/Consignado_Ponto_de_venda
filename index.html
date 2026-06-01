@@ -172,7 +172,17 @@
       <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="ponto-tel" placeholder="(99) 99999-9999"></div>
       <div class="form-group"><label>Endereço</label><input type="text" id="ponto-end" placeholder="Rua, número, bairro"></div>
       <div class="form-group"><label>Código de Acesso (4–6 dígitos)</label><input type="text" id="ponto-codigo" placeholder="Ex: 1234" maxlength="6"></div>
+      <div class="form-group">
+        <label>CNPJ</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="ponto-cnpj" placeholder="00.000.000/0000-00" maxlength="18" oninput="mascaraCNPJ(this)" style="flex:1">
+          <button class="btn btn-outline btn-sm" onclick="buscarCNPJ()" type="button">🔍 Buscar</button>
+        </div>
+      </div>
+      <div class="form-group"><label>Razão Social</label><input type="text" id="ponto-razao" placeholder="Preenchido automaticamente ou manual"></div>
+      <div class="form-group"><label>Nome Fantasia</label><input type="text" id="ponto-fantasia" placeholder="Preenchido automaticamente ou manual"></div>
     </div>
+    <div id="cnpj-resultado" style="display:none;margin-top:12px"></div>
     <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarPonto()">💾 Cadastrar Ponto</button></div>
   </div>
   <div class="ponto-grid" id="lista-pontos"></div>
@@ -547,7 +557,8 @@ async function salvarPonto(){
   }
   const ponto={id:uid(),nome,resp,tel:document.getElementById('ponto-tel').value.trim(),endereco:document.getElementById('ponto-end').value.trim(),codigo,criado_em:hoje(),cnpj:'',razao:''};
   await DB.insert('pontos',ponto);
-  ['ponto-nome','ponto-resp','ponto-tel','ponto-end','ponto-codigo'].forEach(id=>document.getElementById(id).value='');
+  ['ponto-nome','ponto-resp','ponto-tel','ponto-end','ponto-codigo','ponto-cnpj','ponto-razao','ponto-fantasia'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('cnpj-resultado').style.display='none';
   renderPontos();showAlert('Ponto cadastrado! ✅','success');
 }
 async function renderPontos(){
@@ -919,6 +930,48 @@ async function renderHistoricoEstoque(){
     <td>${m.custo>0?fmtMoeda(m.custo):'—'}</td>
   </tr>`).join('');
 }
+
+// ── CNPJ ──
+function mascaraCNPJ(input){{
+  let v=input.value.replace(/\D/g,'').slice(0,14);
+  if(v.length>12)v=v.replace(/(\d{{2}})(\d{{3}})(\d{{3}})(\d{{4}})(\d{{1,2}})/,'$1.$2.$3/$4-$5');
+  else if(v.length>8)v=v.replace(/(\d{{2}})(\d{{3}})(\d{{3}})(\d{{1,4}})/,'$1.$2.$3/$4');
+  else if(v.length>5)v=v.replace(/(\d{{2}})(\d{{3}})(\d{{1,3}})/,'$1.$2.$3');
+  else if(v.length>2)v=v.replace(/(\d{{2}})(\d{{1,3}})/,'$1.$2');
+  input.value=v;
+}}
+async function buscarCNPJ(){{
+  const cnpj=document.getElementById('ponto-cnpj').value.replace(/\D/g,'');
+  if(cnpj.length!==14){{alert('Digite um CNPJ completo com 14 dígitos.');return;}}
+  const resEl=document.getElementById('cnpj-resultado');
+  resEl.style.display='block';
+  resEl.innerHTML='<div class="alert alert-success">⏳ Buscando dados na Receita Federal...</div>';
+  try{{
+    const res=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${{cnpj}}`);
+    if(!res.ok)throw new Error('CNPJ não encontrado');
+    const d=await res.json();
+    document.getElementById('ponto-razao').value=d.razao_social||'';
+    document.getElementById('ponto-fantasia').value=d.nome_fantasia||'';
+    // Preencher endereço se vazio
+    if(!document.getElementById('ponto-end').value&&d.logradouro){{
+      document.getElementById('ponto-end').value=`${{d.logradouro}}, ${{d.numero||'s/n'}} — ${{d.municipio}}/${{d.uf}}`;
+    }}
+    // Preencher nome se vazio
+    if(!document.getElementById('ponto-nome').value){{
+      document.getElementById('ponto-nome').value=d.nome_fantasia||d.razao_social||'';
+    }}
+    resEl.innerHTML=`<div class="alert alert-success">
+      ✅ <strong>${{d.razao_social}}</strong><br>
+      <small>
+        ${{d.nome_fantasia?'Nome Fantasia: '+d.nome_fantasia+'<br>':''}}
+        Situação: <strong style="color:${{d.descricao_situacao_cadastral==='ATIVA'?'var(--green-ok)':'var(--red-alert)}}">${{d.descricao_situacao_cadastral}}</strong><br>
+        ${{d.logradouro?'📍 '+d.logradouro+', '+d.numero+' — '+d.municipio+'/'+d.uf:''}}
+      </small>
+    </div>`;
+  }}catch(err){{
+    resEl.innerHTML='<div class="alert alert-error">❌ CNPJ não encontrado ou inválido. Verifique e tente novamente.</div>';
+  }}
+}}
 
 // ── DASHBOARD ──
 async function renderDashboard(){
