@@ -400,7 +400,7 @@
 // SUPABASE CONFIG
 // ══════════════════════════════════════════
 const SUPA_URL = 'https://amvvmmswwdmotyebhfua.supabase.co';
-const SUPA_KEY = 'sb_publishable_lS_GwaPdsKRMewEceTGPMw_1CrEM0GC';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdnZtbXN3d2Rtb3R5ZWJoZnVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzNDU1OTcsImV4cCI6MjA5NTkyMTU5N30.NuczF_dXGFR7pux_xwdyoVerwLf9zyRND6GP4zHqoBY';
 
 async function sb(table, method='GET', body=null, params='') {
   const url = `${SUPA_URL}/rest/v1/${table}${params}`;
