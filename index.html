@@ -386,13 +386,51 @@
 </div>
 
 <script>
-const KEYS={pontos:'cons_pontos',produtos:'cons_produtos',entregas:'cons_entregas',acertos:'cons_acertos',pedidos:'cons_pedidos',estoque:'cons_estoque',movs:'cons_movs'};
-function load(k){try{return JSON.parse(localStorage.getItem(k))||[];}catch{return[];}}
-function save(k,v){localStorage.setItem(k,JSON.stringify(v));}
+// ══════════════════════════════════════════
+// SUPABASE CONFIG
+// ══════════════════════════════════════════
+const SUPA_URL = 'https://amvvmmswwdmotyebhfua.supabase.co';
+const SUPA_KEY = 'sb_publishable_lS_GwaPdsKRMewEceTGPMw_1CrEM0GC';
+
+async function sb(table, method='GET', body=null, params='') {
+  const url = `${SUPA_URL}/rest/v1/${table}${params}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': `Bearer ${SUPA_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': method==='POST' ? 'return=representation' : (method==='PATCH'||method==='DELETE' ? 'return=representation' : '')
+    },
+    body: body ? JSON.stringify(body) : null
+  });
+  if(!res.ok) { const e=await res.text(); console.error('Supabase error:',e); return null; }
+  if(method==='DELETE') return true;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// CRUD helpers
+const DB = {
+  async getAll(table) { return await sb(table,'GET',null,'?order=id') || []; },
+  async insert(table, row) { return await sb(table,'POST',row); },
+  async update(table, id, row) { return await sb(table,'PATCH',row,`?id=eq.${id}`); },
+  async delete(table, id) { return await sb(table,'DELETE',null,`?id=eq.${id}`); },
+  async query(table, params) { return await sb(table,'GET',null,'?'+params) || []; },
+};
+
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 function fmtMoeda(v){return'R$ '+(+v).toFixed(2).replace('.',',');}
 function fmtData(d){if(!d)return'—';const p=d.split('-');return`${p[2]}/${p[1]}/${p[0]}`;}
 function hoje(){return new Date().toISOString().slice(0,10);}
+
+// ── LOADING STATE ──
+function showLoading(msg='Carregando...') {
+  document.getElementById('alert-global').innerHTML=`<div class="alert alert-success">⏳ ${msg}</div>`;
+}
+function hideLoading() {
+  setTimeout(()=>document.getElementById('alert-global').innerHTML='', 500);
+}
 
 // ── ROTEAMENTO ──
 function rotear(){
@@ -403,15 +441,16 @@ function rotear(){
 
 // ── ASSINATURA ──
 let sigCtx=null,sigDesenhando=false,sigEntregaId=null;
-function iniciarAssinatura(id){
+async function iniciarAssinatura(id){
   sigEntregaId=id;
-  const e=load(KEYS.entregas).find(x=>x.id===id);
+  const rows=await DB.query('entregas',`id=eq.${id}`);
+  const e=rows?.[0];
   const resumoEl=document.getElementById('assinar-resumo');
   if(!e){resumoEl.innerHTML='<div class="alert alert-error">Entrega não encontrada.</div>';document.getElementById('sig-wrap').style.display='none';return;}
   if(e.assinatura){
     document.getElementById('sig-wrap').style.display='none';
     document.getElementById('assinar-ok').style.display='block';
-    resumoEl.innerHTML=gerarResumoHTML(e)+`<br><img src="${e.assinatura}" style="border:1px solid var(--toast);border-radius:8px;max-width:100%;margin-top:10px"><br><small style="color:var(--green-ok)">✅ Já assinado em ${fmtData(e.dataAssinatura)}</small>`;
+    resumoEl.innerHTML=gerarResumoHTML(e)+`<br><img src="${e.assinatura}" style="border:1px solid var(--toast);border-radius:8px;max-width:100%;margin-top:10px"><br><small style="color:var(--green-ok)">✅ Já assinado em ${fmtData(e.data_assinatura)}</small>`;
     return;
   }
   resumoEl.innerHTML=gerarResumoHTML(e);
@@ -419,8 +458,8 @@ function iniciarAssinatura(id){
 }
 function gerarResumoHTML(e){
   return`<h3>Detalhes da Entrega</h3>
-    <div class="resumo-item"><span>📍 Ponto</span><strong>${e.pontoNome}</strong></div>
-    <div class="resumo-item"><span>🧁 Produto</span><strong>${e.prodNome}</strong></div>
+    <div class="resumo-item"><span>📍 Ponto</span><strong>${e.ponto_nome}</strong></div>
+    <div class="resumo-item"><span>🧁 Produto</span><strong>${e.prod_nome}</strong></div>
     <div class="resumo-item"><span>📦 Quantidade</span><strong>${e.qtd} unidades</strong></div>
     <div class="resumo-item"><span>💰 Preço unit.</span><strong>${fmtMoeda(e.preco)}</strong></div>
     <div class="resumo-item"><span>💵 Total</span><strong style="color:var(--green-ok)">${fmtMoeda(e.qtd*e.preco)}</strong></div>
@@ -436,7 +475,7 @@ function setupCanvas(){
   sigCtx=canvas.getContext('2d');
   sigCtx.scale(ratio,ratio);
   sigCtx.strokeStyle='#1e0f05';sigCtx.lineWidth=2.5;sigCtx.lineCap='round';sigCtx.lineJoin='round';
-  function pos(e,canvas){const r=canvas.getBoundingClientRect();const src=e.touches?e.touches[0]:e;return[src.clientX-r.left,src.clientY-r.top];}
+  function pos(e,c){const r=c.getBoundingClientRect();const s=e.touches?e.touches[0]:e;return[s.clientX-r.left,s.clientY-r.top];}
   canvas.addEventListener('touchstart',e=>{e.preventDefault();sigDesenhando=true;const[x,y]=pos(e,canvas);sigCtx.beginPath();sigCtx.moveTo(x,y);},{passive:false});
   canvas.addEventListener('touchmove',e=>{e.preventDefault();if(!sigDesenhando)return;const[x,y]=pos(e,canvas);sigCtx.lineTo(x,y);sigCtx.stroke();},{passive:false});
   canvas.addEventListener('touchend',()=>{sigDesenhando=false;});
@@ -447,11 +486,10 @@ function setupCanvas(){
 }
 function limparAssinatura(){if(sigCtx){const c=document.getElementById('sig-canvas');sigCtx.clearRect(0,0,c.width,c.height);}}
 function canvasVazio(){const c=document.getElementById('sig-canvas');if(!sigCtx)return true;return!sigCtx.getImageData(0,0,c.width,c.height).data.some(v=>v!==0);}
-function confirmarAssinatura(){
+async function confirmarAssinatura(){
   if(canvasVazio()){alert('Por favor, assine antes de confirmar.');return;}
   const imgData=document.getElementById('sig-canvas').toDataURL('image/png');
-  const entregas=load(KEYS.entregas).map(e=>e.id===sigEntregaId?{...e,assinatura:imgData,dataAssinatura:hoje()}:e);
-  save(KEYS.entregas,entregas);
+  await DB.update('entregas',sigEntregaId,{assinatura:imgData,data_assinatura:hoje()});
   document.getElementById('sig-wrap').style.display='none';
   document.getElementById('assinar-ok').style.display='block';
 }
@@ -470,12 +508,14 @@ function copiarLink(){
   inp.select();inp.setSelectionRange(0,9999);
   navigator.clipboard.writeText(inp.value).then(()=>alert('Link copiado! ✅')).catch(()=>{document.execCommand('copy');alert('Link copiado! ✅');});
 }
-function enviarWhatsApp(){
+async function enviarWhatsApp(){
   const link=document.getElementById('link-assinatura-input').value;
-  const e=load(KEYS.entregas).find(x=>x.id===ultimaEntregaId);
-  const ponto=load(KEYS.pontos).find(p=>e&&p.id===e.pontoId);
+  const rows=await DB.query('entregas',`id=eq.${ultimaEntregaId}`);
+  const e=rows?.[0];
+  const pontos=await DB.query('pontos',`id=eq.${e?.ponto_id}`);
+  const ponto=pontos?.[0];
   const tel=(ponto?.tel||'').replace(/\D/g,'');
-  const msg=encodeURIComponent(`Olá ${ponto?.resp||''}! 🍫 Segue o link para confirmar o recebimento de *${e?.qtd} ${e?.prodNome}* no valor de ${e?fmtMoeda(e.qtd*e.preco):''}:\n\n${link}`);
+  const msg=encodeURIComponent(`Olá ${ponto?.resp||''}! 🍫 Segue o link para confirmar o recebimento de *${e?.qtd} ${e?.prod_nome}* no valor de ${e?fmtMoeda(e.qtd*e.preco):''}:\n\n${link}`);
   window.open(tel?`https://wa.me/55${tel}?text=${msg}`:`https://wa.me/?text=${msg}`,'_blank');
 }
 
@@ -495,70 +535,84 @@ function showSection(id){
 }
 
 // ── PONTOS ──
-function salvarPonto(){
+async function salvarPonto(){
   const nome=document.getElementById('ponto-nome').value.trim();
   const resp=document.getElementById('ponto-resp').value.trim();
   if(!nome||!resp)return alert('Preencha Nome e Responsável.');
   const codigo=document.getElementById('ponto-codigo').value.trim();
   if(codigo&&codigo.length<4)return alert('Código deve ter ao menos 4 caracteres.');
-  const pontos=load(KEYS.pontos);
-  if(codigo&&pontos.find(p=>p.codigo===codigo))return alert('Código já existe.');
-  pontos.push({id:uid(),nome,resp,tel:document.getElementById('ponto-tel').value.trim(),end:document.getElementById('ponto-end').value.trim(),codigo,criadoEm:hoje()});
-  save(KEYS.pontos,pontos);
+  if(codigo){
+    const ex=await DB.query('pontos',`codigo=eq.${codigo}`);
+    if(ex?.length)return alert('Código já existe.');
+  }
+  const ponto={id:uid(),nome,resp,tel:document.getElementById('ponto-tel').value.trim(),endereco:document.getElementById('ponto-end').value.trim(),codigo,criado_em:hoje(),cnpj:'',razao:''};
+  await DB.insert('pontos',ponto);
   ['ponto-nome','ponto-resp','ponto-tel','ponto-end','ponto-codigo'].forEach(id=>document.getElementById(id).value='');
   renderPontos();showAlert('Ponto cadastrado! ✅','success');
 }
-function renderPontos(){
-  const pontos=load(KEYS.pontos);
+async function renderPontos(){
+  const pontos=await DB.getAll('pontos');
+  const entregas=await DB.query('entregas','status=eq.ativo');
   const el=document.getElementById('lista-pontos');
   if(!pontos.length){el.innerHTML='<p style="color:var(--text-muted)">Nenhum ponto cadastrado.</p>';return;}
-  const entregas=load(KEYS.entregas);
   el.innerHTML=pontos.map(p=>{
-    const ents=entregas.filter(e=>e.pontoId===p.id&&e.status==='ativo');
+    const ents=entregas.filter(e=>e.ponto_id===p.id);
     const ti=ents.reduce((a,e)=>a+e.qtd,0);
     const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
     return`<div class="ponto-card">
       <div class="ponto-nome">${p.nome}</div>
       <div class="ponto-resp">👤 ${p.resp}${p.tel?' · 📱 '+p.tel:''}</div>
-      ${p.end?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">📍 ${p.end}</div>`:''}
+      ${p.endereco?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">📍 ${p.endereco}</div>`:''}
       <div class="ponto-saldo"><span>Consignado:</span><strong>${ti} itens</strong></div>
       <div class="ponto-saldo"><span>A receber:</span><strong style="color:var(--green-ok)">${fmtMoeda(tv)}</strong></div>
       ${p.codigo?`<div class="ponto-saldo"><span>Código:</span><span class="badge badge-gold">${p.codigo}</span></div>`:''}
       <div class="ponto-actions">
-        <button class="btn btn-outline btn-sm" onclick="showSection('entregas');setTimeout(()=>{document.getElementById('ent-ponto').value='${p.id}'},200)">🚚 Entregar</button>
+        <button class="btn btn-outline btn-sm" onclick="showSection('entregas');setTimeout(()=>{document.getElementById('ent-ponto').value='${p.id}'},300)">🚚 Entregar</button>
         <button class="btn btn-danger btn-sm" onclick="excluirPonto('${p.id}')">🗑</button>
       </div>
     </div>`;
   }).join('');
 }
-function excluirPonto(id){if(!confirm('Excluir este ponto?'))return;save(KEYS.pontos,load(KEYS.pontos).filter(p=>p.id!==id));renderPontos();}
+async function excluirPonto(id){
+  if(!confirm('Excluir este ponto?'))return;
+  await DB.delete('pontos',id);
+  renderPontos();
+}
 
 // ── PRODUTOS ──
-function salvarProduto(){
+async function salvarProduto(){
   const nome=document.getElementById('prod-nome').value.trim();
   const preco=parseFloat(document.getElementById('prod-preco').value);
   if(!nome||!preco)return alert('Preencha Nome e Preço.');
-  const produtos=load(KEYS.produtos);
-  produtos.push({id:uid(),nome,cat:document.getElementById('prod-cat').value,preco,unidade:document.getElementById('prod-unidade').value,desc:document.getElementById('prod-desc').value.trim()});
-  save(KEYS.produtos,produtos);
+  await DB.insert('produtos',{id:uid(),nome,cat:document.getElementById('prod-cat').value,preco,unidade:document.getElementById('prod-unidade').value,descricao:document.getElementById('prod-desc').value.trim(),custo_medio:0});
   ['prod-nome','prod-preco','prod-desc'].forEach(id=>document.getElementById(id).value='');
   renderProdutos();showAlert('Produto cadastrado! ✅','success');
 }
-function renderProdutos(){
-  const p=load(KEYS.produtos);
+async function renderProdutos(){
+  const p=await DB.getAll('produtos');
   const tb=document.querySelector('#tabela-produtos tbody');
   if(!p.length){tb.innerHTML='<tr><td colspan="5" style="color:var(--text-muted);text-align:center">Nenhum produto.</td></tr>';return;}
-  tb.innerHTML=p.map(x=>`<tr><td><strong>${x.nome}</strong>${x.desc?'<br><small style="color:var(--text-muted)">'+x.desc+'</small>':''}</td><td>${x.cat}</td><td>${fmtMoeda(x.preco)}</td><td>${x.unidade}</td><td><button class="btn btn-danger btn-sm" onclick="excluirProduto('${x.id}')">🗑</button></td></tr>`).join('');
+  tb.innerHTML=p.map(x=>`<tr><td><strong>${x.nome}</strong>${x.descricao?'<br><small style="color:var(--text-muted)">'+x.descricao+'</small>':''}</td><td>${x.cat}</td><td>${fmtMoeda(x.preco)}</td><td>${x.unidade}</td><td><button class="btn btn-danger btn-sm" onclick="excluirProduto('${x.id}')">🗑</button></td></tr>`).join('');
 }
-function excluirProduto(id){if(!confirm('Excluir?'))return;save(KEYS.produtos,load(KEYS.produtos).filter(p=>p.id!==id));renderProdutos();}
+async function excluirProduto(id){
+  if(!confirm('Excluir produto?'))return;
+  await DB.delete('produtos',id);
+  renderProdutos();
+}
 
 // ── SELECTS ──
-function popularSelectPontos(elId,comTodos=false){
+async function popularSelectPontos(elId,comTodos=false){
   const el=document.getElementById(elId);if(!el)return;
+  const pontos=await DB.getAll('pontos');
   el.innerHTML=(comTodos?'<option value="">Todos os pontos</option>':'<option value="">Selecione...</option>')+
-    load(KEYS.pontos).map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
+    pontos.map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
 }
-// popularSelectProdutos moved to estoque section
+async function popularSelectProdutos(elId,comTodos=false){
+  const el=document.getElementById(elId);if(!el)return;
+  const prods=await DB.getAll('produtos');
+  el.innerHTML=(comTodos?'<option value="">Todos os produtos</option>':'<option value="">Selecione...</option>')+
+    prods.map(p=>`<option value="${p.id}" data-preco="${p.preco}">${p.nome} — ${fmtMoeda(p.preco)}</option>`).join('');
+}
 function preencherPrecoEntrega(){
   const sel=document.getElementById('ent-produto');
   const opt=sel.options[sel.selectedIndex];
@@ -566,7 +620,7 @@ function preencherPrecoEntrega(){
 }
 
 // ── ENTREGAS ──
-function salvarEntrega(){
+async function salvarEntrega(){
   const pontoId=document.getElementById('ent-ponto').value;
   const prodId=document.getElementById('ent-produto').value;
   const qtd=parseInt(document.getElementById('ent-qtd').value);
@@ -574,30 +628,29 @@ function salvarEntrega(){
   const data=document.getElementById('ent-data').value||hoje();
   const obs=document.getElementById('ent-obs').value.trim();
   if(!pontoId||!prodId||!qtd||!preco)return alert('Preencha todos os campos obrigatórios.');
-  const ponto=load(KEYS.pontos).find(p=>p.id===pontoId);
-  const produto=load(KEYS.produtos).find(p=>p.id===prodId);
+  const pontos=await DB.query('pontos',`id=eq.${pontoId}`);
+  const ponto=pontos?.[0];
+  const prods=await DB.query('produtos',`id=eq.${prodId}`);
+  const produto=prods?.[0];
   const novaId=uid();
-  const entregas=load(KEYS.entregas);
-  entregas.push({id:novaId,pontoId,prodId,pontoNome:ponto.nome,prodNome:produto.nome,qtd,preco,data,obs,status:'ativo',assinatura:null,dataAssinatura:null});
-  save(KEYS.entregas,entregas);
-  // Baixar do estoque
-  const movs=load(KEYS.movs);
-  movs.push({id:uid(),prodId,prodNome:produto.nome,tipo:'saida',qtd,motivo:'entrega',destino:ponto.nome,data,ref:novaId});
-  save(KEYS.movs,movs);
+  showLoading('Registrando entrega...');
+  await DB.insert('entregas',{id:novaId,ponto_id:pontoId,prod_id:prodId,ponto_nome:ponto.nome,prod_nome:produto.nome,qtd,preco,data,obs,status:'ativo',assinatura:null,data_assinatura:null});
+  await DB.insert('movimentacoes',{id:uid(),prod_id:prodId,prod_nome:produto.nome,tipo:'saida',qtd,custo:0,motivo:'entrega',destino:ponto.nome,data,ref:novaId});
   ['ent-qtd','ent-preco','ent-obs'].forEach(id=>document.getElementById(id).value='');
   renderEntregas();
   mostrarLinkAssinatura(novaId);
-  showAlert(`Entrega registrada! Copie o link abaixo e envie para ${ponto.nome} assinar. 🚚`,'success');
+  hideLoading();
+  showAlert(`Entrega registrada! Envie o link para ${ponto.nome} assinar. 🚚`,'success');
 }
-function renderEntregas(){
+async function renderEntregas(){
   const filtro=document.getElementById('filtro-ent-ponto')?.value||'';
-  let entregas=load(KEYS.entregas);
-  if(filtro)entregas=entregas.filter(e=>e.pontoId===filtro);
-  entregas=entregas.slice().reverse();
+  let params='order=id.desc';
+  if(filtro)params=`ponto_id=eq.${filtro}&order=id.desc`;
+  const entregas=await DB.query('entregas',params);
   const tb=document.querySelector('#tabela-entregas tbody');
   if(!entregas.length){tb.innerHTML='<tr><td colspan="9" style="color:var(--text-muted);text-align:center">Nenhuma entrega.</td></tr>';return;}
   tb.innerHTML=entregas.map(e=>`<tr>
-    <td>${fmtData(e.data)}</td><td>${e.pontoNome}</td><td>${e.prodNome}</td>
+    <td>${fmtData(e.data)}</td><td>${e.ponto_nome}</td><td>${e.prod_nome}</td>
     <td><strong>${e.qtd}</strong></td><td>${fmtMoeda(e.preco)}</td><td>${fmtMoeda(e.qtd*e.preco)}</td>
     <td style="text-align:center">${e.assinatura
       ?`<span class="badge badge-green" style="cursor:pointer" onclick="verAssinatura('${e.id}')">✅ Ver</span>`
@@ -611,36 +664,42 @@ function renderEntregas(){
     </td>
   </tr>`).join('');
 }
-function verAssinatura(id){
-  const e=load(KEYS.entregas).find(x=>x.id===id);if(!e||!e.assinatura)return;
+async function verAssinatura(id){
+  const rows=await DB.query('entregas',`id=eq.${id}`);
+  const e=rows?.[0];if(!e||!e.assinatura)return;
   document.getElementById('ver-assinatura-content').innerHTML=`
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">📍 ${e.pontoNome} · ${fmtData(e.dataAssinatura||e.data)}</p>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">📍 ${e.ponto_nome} · ${fmtData(e.data_assinatura||e.data)}</p>
     <img src="${e.assinatura}" style="border:2px solid var(--toast);border-radius:10px;width:100%;background:#fff">
-    <p style="margin-top:10px;font-size:14px"><strong>${e.qtd} ${e.prodNome}</strong> — ${fmtMoeda(e.qtd*e.preco)}</p>`;
+    <p style="margin-top:10px;font-size:14px"><strong>${e.qtd} ${e.prod_nome}</strong> — ${fmtMoeda(e.qtd*e.preco)}</p>`;
   document.getElementById('modal-ver-assinatura').classList.add('open');
 }
-function editarEntrega(id){
-  const e=load(KEYS.entregas).find(x=>x.id===id);if(!e)return;
+async function editarEntrega(id){
+  const rows=await DB.query('entregas',`id=eq.${id}`);
+  const e=rows?.[0];if(!e)return;
   document.getElementById('edit-id').value=id;document.getElementById('edit-qtd').value=e.qtd;document.getElementById('edit-preco').value=e.preco;
   document.getElementById('modal-editar-ent').classList.add('open');
 }
-function confirmarEdicao(){
+async function confirmarEdicao(){
   const id=document.getElementById('edit-id').value;
-  save(KEYS.entregas,load(KEYS.entregas).map(e=>e.id===id?{...e,qtd:parseInt(document.getElementById('edit-qtd').value),preco:parseFloat(document.getElementById('edit-preco').value)}:e));
+  await DB.update('entregas',id,{qtd:parseInt(document.getElementById('edit-qtd').value),preco:parseFloat(document.getElementById('edit-preco').value)});
   fecharModal('modal-editar-ent');renderEntregas();
 }
-function excluirEntrega(id){if(!confirm('Excluir?'))return;save(KEYS.entregas,load(KEYS.entregas).filter(e=>e.id!==id));renderEntregas();}
+async function excluirEntrega(id){
+  if(!confirm('Excluir esta entrega?'))return;
+  await DB.delete('entregas',id);
+  renderEntregas();
+}
 
 // ── ACERTOS ──
-function calcularAcerto(){
+async function calcularAcerto(){
   const pontoId=document.getElementById('acerto-ponto').value;
   if(!pontoId){document.getElementById('acerto-resumo').style.display='none';return;}
-  const ents=load(KEYS.entregas).filter(e=>e.pontoId===pontoId&&e.status==='ativo');
+  const ents=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
   const ti=ents.reduce((a,e)=>a+e.qtd,0);const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
   const r=document.getElementById('acerto-resumo');r.style.display='block';
-  r.innerHTML=`<strong>Em aberto</strong><br>Itens: <strong>${ti}</strong> · Total: <strong style="color:var(--green-ok)">${fmtMoeda(tv)}</strong>${ents.map(e=>`<br>— ${e.prodNome}: ${e.qtd}×${fmtMoeda(e.preco)} = ${fmtMoeda(e.qtd*e.preco)}`).join('')}`;
+  r.innerHTML=`<strong>Em aberto</strong><br>Itens: <strong>${ti}</strong> · Total: <strong style="color:var(--green-ok)">${fmtMoeda(tv)}</strong>${ents.map(e=>`<br>— ${e.prod_nome}: ${e.qtd}×${fmtMoeda(e.preco)} = ${fmtMoeda(e.qtd*e.preco)}`).join('')}`;
 }
-function realizarAcerto(){
+async function realizarAcerto(){
   const pontoId=document.getElementById('acerto-ponto').value;
   const valor=parseFloat(document.getElementById('acerto-valor').value)||0;
   const dev=parseInt(document.getElementById('acerto-dev').value)||0;
@@ -648,52 +707,56 @@ function realizarAcerto(){
   const obs=document.getElementById('acerto-obs').value.trim();
   if(!pontoId)return alert('Selecione o ponto.');
   if(!valor&&!dev)return alert('Informe valor recebido ou qtd devolvida.');
-  const ponto=load(KEYS.pontos).find(p=>p.id===pontoId);
-  const entregas=load(KEYS.entregas);
+  const pontos=await DB.query('pontos',`id=eq.${pontoId}`);
+  const ponto=pontos?.[0];
+  showLoading('Registrando acerto...');
+  const ents=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
   let devR=dev;
-  const ents=entregas.filter(e=>e.pontoId===pontoId&&e.status==='ativo');
-  ents.forEach(e=>{if(devR>=e.qtd){e.status='quitado';devR-=e.qtd;}else if(devR>0){e.qtd-=devR;devR=0;}});
+  for(const e of ents){
+    if(devR>=e.qtd){await DB.update('entregas',e.id,{status:'quitado'});devR-=e.qtd;}
+    else if(devR>0){await DB.update('entregas',e.id,{qtd:e.qtd-devR});devR=0;}
+  }
   const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
-  if(valor>=tv&&valor>0)ents.forEach(e=>{if(e.status!=='quitado')e.status='quitado';});
-  save(KEYS.entregas,entregas.map(e=>{const f=ents.find(x=>x.id===e.id);return f||e;}));
-  const acertos=load(KEYS.acertos);
-  acertos.push({id:uid(),pontoId,pontoNome:ponto.nome,valor,dev,data,obs});
-  save(KEYS.acertos,acertos);
+  if(valor>=tv&&valor>0){for(const e of ents){if(e.status!=='quitado')await DB.update('entregas',e.id,{status:'quitado'});}}
+  await DB.insert('acertos',{id:uid(),ponto_id:pontoId,ponto_nome:ponto.nome,valor,dev,data,obs});
   ['acerto-valor','acerto-dev','acerto-obs'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('acerto-resumo').style.display='none';
+  hideLoading();
   renderAcertos();showAlert(`Acerto de ${fmtMoeda(valor)} registrado para ${ponto.nome}! 💰`,'success');
 }
-function renderAcertos(){
-  const a=load(KEYS.acertos).slice().reverse();
+async function renderAcertos(){
+  const a=await DB.query('acertos','order=id.desc');
   const tb=document.querySelector('#tabela-acertos tbody');
   if(!a.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--text-muted);text-align:center">Nenhum acerto.</td></tr>';return;}
-  tb.innerHTML=a.map(x=>`<tr><td>${fmtData(x.data)}</td><td>${x.pontoNome}</td><td>${x.dev||0} un</td><td style="color:var(--green-ok);font-weight:700">${fmtMoeda(x.valor)}</td><td>${x.obs||'—'}</td><td style="display:flex;gap:4px"><button class="btn btn-gold btn-sm" onclick="verReciboAcerto('${x.id}')">🧾</button><button class="btn btn-danger btn-sm" onclick="excluirAcerto('${x.id}')">🗑</button></td></tr>`).join('');
+  tb.innerHTML=a.map(x=>`<tr><td>${fmtData(x.data)}</td><td>${x.ponto_nome}</td><td>${x.dev||0} un</td><td style="color:var(--green-ok);font-weight:700">${fmtMoeda(x.valor)}</td><td>${x.obs||'—'}</td><td style="display:flex;gap:4px"><button class="btn btn-gold btn-sm" onclick="verReciboAcerto('${x.id}')">🧾</button><button class="btn btn-danger btn-sm" onclick="excluirAcerto('${x.id}')">🗑</button></td></tr>`).join('');
+}
+async function excluirAcerto(id){
+  if(!confirm('Excluir este acerto?'))return;
+  await DB.delete('acertos',id);
+  renderAcertos();showAlert('Acerto excluído.','success');
 }
 
-function excluirAcerto(id){
-  if(!confirm('Excluir este acerto? Os itens consignados não serão restaurados automaticamente.'))return;
-  save(KEYS.acertos,load(KEYS.acertos).filter(a=>a.id!==id));
-  renderAcertos();
-  showAlert('Acerto excluído.','success');
-}
 // ── RECIBO ──
-function gerarReciboModal(){
+async function gerarReciboModal(){
   const pontoId=document.getElementById('acerto-ponto').value;
   if(!pontoId)return alert('Selecione o ponto.');
-  const ponto=load(KEYS.pontos).find(p=>p.id===pontoId);
-  const entregas=load(KEYS.entregas).filter(e=>e.pontoId===pontoId&&e.status==='ativo');
+  const pontos=await DB.query('pontos',`id=eq.${pontoId}`);
+  const ponto=pontos?.[0];
+  const entregas=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
   mostrarRecibo({ponto,valor:parseFloat(document.getElementById('acerto-valor').value)||0,dev:parseInt(document.getElementById('acerto-dev').value)||0,data:document.getElementById('acerto-data').value||hoje(),obs:document.getElementById('acerto-obs').value.trim(),entregas,id:'PREV-'+Date.now()});
 }
-function verReciboAcerto(id){
-  const a=load(KEYS.acertos).find(x=>x.id===id);if(!a)return;
-  const ponto=load(KEYS.pontos).find(p=>p.id===a.pontoId)||{nome:a.pontoNome,resp:'—'};
+async function verReciboAcerto(id){
+  const rows=await DB.query('acertos',`id=eq.${id}`);
+  const a=rows?.[0];if(!a)return;
+  const pontos=await DB.query('pontos',`id=eq.${a.ponto_id}`);
+  const ponto=pontos?.[0]||{nome:a.ponto_nome,resp:'—'};
   mostrarRecibo({ponto,valor:a.valor,dev:a.dev,data:a.data,obs:a.obs,entregas:[],id:a.id.toUpperCase()});
 }
 let reciboAtualPontoId=null;
 function mostrarRecibo({ponto,valor,dev,data,obs,entregas,id}){
   reciboAtualPontoId=ponto?.id||null;
   const tv=entregas.reduce((a,e)=>a+(e.qtd*e.preco),0);
-  const itensHtml=entregas.length?entregas.map(e=>`<div class="recibo-linha"><span>${e.prodNome} (${e.qtd} un)</span><span>${fmtMoeda(e.qtd*e.preco)}</span></div>`).join(''):'<div class="recibo-linha"><span>Itens quitados</span><span>—</span></div>';
+  const itensHtml=entregas.length?entregas.map(e=>`<div class="recibo-linha"><span>${e.prod_nome} (${e.qtd} un)</span><span>${fmtMoeda(e.qtd*e.preco)}</span></div>`).join(''):'<div class="recibo-linha"><span>Itens quitados</span><span>—</span></div>';
   document.getElementById('recibo-content').innerHTML=`<div class="recibo-box" id="recibo-printable">
     <div class="recibo-logo">🍫 Consignado</div><div class="recibo-sub">RECIBO DE QUITAÇÃO</div>
     <div class="recibo-linha"><span>Nº</span><span>${id}</span></div>
@@ -710,7 +773,6 @@ function mostrarRecibo({ponto,valor,dev,data,obs,entregas,id}){
     <div style="text-align:center;margin-top:16px;font-size:10px;color:var(--text-muted)">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
   </div>`;
   document.getElementById('modal-recibo').classList.add('open');
-  // Reset assinaturas
   ['sig-fornecedor','sig-comerciante'].forEach(id=>{
     const wrap=document.getElementById(id.replace('sig-','img-')+'-wrap');
     if(wrap)wrap.style.display='none';
@@ -736,8 +798,7 @@ function imprimirRecibo(){
 // ── ASSINATURAS RECIBO ──
 let sigReciboCtxs={};
 function setupSigRecibo(canvasId){
-  const canvas=document.getElementById(canvasId);
-  if(!canvas)return;
+  const canvas=document.getElementById(canvasId);if(!canvas)return;
   const ratio=window.devicePixelRatio||1;
   const w=canvas.parentElement.clientWidth-32;
   canvas.style.width=w+'px';canvas.style.height='120px';
@@ -756,153 +817,116 @@ function setupSigRecibo(canvasId){
   canvas.addEventListener('mouseleave',()=>{sigReciboCtxs[canvasId].drawing=false;});
 }
 function limparSigRecibo(canvasId,imgId){
-  const c=document.getElementById(canvasId);
-  const d=sigReciboCtxs[canvasId];
+  const c=document.getElementById(canvasId);const d=sigReciboCtxs[canvasId];
   if(c&&d)d.ctx.clearRect(0,0,c.width,c.height);
-  const wrap=document.getElementById(imgId+'-wrap');
-  if(wrap)wrap.style.display='none';
+  const wrap=document.getElementById(imgId+'-wrap');if(wrap)wrap.style.display='none';
   if(c)c.style.display='block';
 }
 function capturarSigsRecibo(){
   ['sig-fornecedor','sig-comerciante'].forEach(id=>{
-    const canvas=document.getElementById(id);
-    if(!canvas)return;
+    const canvas=document.getElementById(id);if(!canvas)return;
     const imgId=id.replace('sig-','img-');
     const data=sigReciboCtxs[id]?.ctx?.getImageData(0,0,canvas.width,canvas.height)?.data;
     const vazio=!data||!Array.from(data).some(v=>v!==0);
     if(!vazio){
-      const imgEl=document.getElementById(imgId);
-      const wrap=document.getElementById(imgId+'-wrap');
+      const imgEl=document.getElementById(imgId);const wrap=document.getElementById(imgId+'-wrap');
       if(imgEl&&wrap){imgEl.src=canvas.toDataURL('image/png');wrap.style.display='block';canvas.style.display='none';}
     }
   });
 }
 function getSigDataURL(canvasId){
-  const canvas=document.getElementById(canvasId);
-  if(!canvas)return null;
+  const canvas=document.getElementById(canvasId);if(!canvas)return null;
   const data=sigReciboCtxs[canvasId]?.ctx?.getImageData(0,0,canvas.width,canvas.height)?.data;
   const vazio=!data||!Array.from(data).some(v=>v!==0);
   return vazio?null:canvas.toDataURL('image/png');
 }
-function enviarReciboWhatsApp(){
+async function enviarReciboWhatsApp(){
   capturarSigsRecibo();
-  const pontoId=reciboAtualPontoId;
-  const ponto=load(KEYS.pontos).find(p=>p.id===pontoId);
+  const pontos=await DB.query('pontos',`id=eq.${reciboAtualPontoId}`);
+  const ponto=pontos?.[0];
   const tel=(ponto?.tel||'').replace(/\D/g,'');
   const msg=encodeURIComponent('Segue o recibo do nosso acerto. Obrigado! 🍫');
-  const url=tel?`https://wa.me/55${tel}?text=${msg}`:`https://wa.me/?text=${msg}`;
   imprimirRecibo();
-  setTimeout(()=>window.open(url,'_blank'),800);
+  setTimeout(()=>window.open(tel?`https://wa.me/55${tel}?text=${msg}`:`https://wa.me/?text=${msg}`,'_blank'),800);
 }
+
 // ── ESTOQUE ──
-function salvarEntradaEstoque(){
+async function salvarEntradaEstoque(){
   const prodId=document.getElementById('est-produto').value;
   const qtd=parseInt(document.getElementById('est-qtd').value);
   const custo=parseFloat(document.getElementById('est-custo').value)||0;
   const data=document.getElementById('est-data').value||hoje();
   const obs=document.getElementById('est-obs').value.trim();
   if(!prodId||!qtd)return alert('Selecione o produto e a quantidade.');
-  const produto=load(KEYS.produtos).find(p=>p.id===prodId);
-  const movs=load(KEYS.movs);
-  movs.push({id:uid(),prodId,prodNome:produto.nome,tipo:'entrada',qtd,custo,motivo:'producao',destino:obs||'Produção',data});
-  save(KEYS.movs,movs);
-  // Atualizar custo médio no produto
-  const produtos=load(KEYS.produtos).map(p=>{
-    if(p.id!==prodId)return p;
-    const totalMovs=movs.filter(m=>m.prodId===prodId&&m.tipo==='entrada');
-    const totalQtd=totalMovs.reduce((a,m)=>a+m.qtd,0);
-    const totalCusto=totalMovs.reduce((a,m)=>a+(m.qtd*(m.custo||0)),0);
-    return {...p,custoMedio:totalQtd>0?totalCusto/totalQtd:0};
-  });
-  save(KEYS.produtos,produtos);
+  const prods=await DB.query('produtos',`id=eq.${prodId}`);
+  const produto=prods?.[0];
+  showLoading('Registrando entrada...');
+  await DB.insert('movimentacoes',{id:uid(),prod_id:prodId,prod_nome:produto.nome,tipo:'entrada',qtd,custo,motivo:'producao',destino:obs||'Produção',data});
+  const todasMovs=await DB.query('movimentacoes',`prod_id=eq.${prodId}&tipo=eq.entrada`);
+  const totalQtd=todasMovs.reduce((a,m)=>a+m.qtd,0);
+  const totalCusto=todasMovs.reduce((a,m)=>a+(m.qtd*(m.custo||0)),0);
+  const custoMedio=totalQtd>0?totalCusto/totalQtd:0;
+  await DB.update('produtos',prodId,{custo_medio:custoMedio});
   ['est-qtd','est-custo','est-obs'].forEach(id=>document.getElementById(id).value='');
+  hideLoading();
   renderEstoque();renderHistoricoEstoque();
   showAlert(`Entrada de ${qtd} ${produto.nome} registrada! ✅`,'success');
 }
-
-function calcularSaldoEstoque(prodId){
-  const movs=load(KEYS.movs).filter(m=>m.prodId===prodId);
+async function calcularSaldoEstoque(prodId){
+  const movs=await DB.query('movimentacoes',`prod_id=eq.${prodId}`);
   const entradas=movs.filter(m=>m.tipo==='entrada').reduce((a,m)=>a+m.qtd,0);
   const saidas=movs.filter(m=>m.tipo==='saida').reduce((a,m)=>a+m.qtd,0);
   return entradas-saidas;
 }
-
-function renderEstoque(){
-  const produtos=load(KEYS.produtos);
-  const entregas=load(KEYS.entregas).filter(e=>e.status==='ativo');
-  // Stats
-  const totalDisp=produtos.reduce((a,p)=>a+Math.max(0,calcularSaldoEstoque(p.id)),0);
-  const totalCons=entregas.reduce((a,e)=>a+e.qtd,0);
-  const valorDisp=produtos.reduce((a,p)=>{
-    const saldo=Math.max(0,calcularSaldoEstoque(p.id));
-    return a+(saldo*(p.custoMedio||0));
-  },0);
+async function renderEstoque(){
+  const produtos=await DB.getAll('produtos');
+  const entregas=await DB.query('entregas','status=eq.ativo');
+  let totalDisp=0,totalCons=0,valorDisp=0;
+  const rows=await Promise.all(produtos.map(async p=>{
+    const saldo=await calcularSaldoEstoque(p.id);
+    const disp=Math.max(0,saldo);
+    const cons=entregas.filter(e=>e.prod_id===p.id).reduce((a,e)=>a+e.qtd,0);
+    const movs=await DB.query('movimentacoes',`prod_id=eq.${p.id}&tipo=eq.entrada`);
+    const totalProd=movs.reduce((a,m)=>a+m.qtd,0);
+    const cm=p.custo_medio||0;
+    totalDisp+=disp;totalCons+=cons;valorDisp+=disp*cm;
+    const status=disp<=0?'<span class="badge badge-red">⚠ Zerado</span>':disp<=5?'<span class="badge badge-gold">⚠ Baixo</span>':'<span class="badge badge-green">OK</span>';
+    return`<tr><td><strong>${p.nome}</strong></td>
+      <td><strong style="font-size:16px;color:${disp<=0?'var(--red-alert)':disp<=5?'#856404':'var(--green-ok)'}">${disp}</strong></td>
+      <td>${cons}</td><td>${totalProd}</td>
+      <td>${cm>0?fmtMoeda(cm):'—'}</td>
+      <td>${disp*cm>0?fmtMoeda(disp*cm):'—'}</td>
+      <td>${status}</td></tr>`;
+  }));
   document.getElementById('est-stats-grid').innerHTML=`
     <div class="stat-card"><div class="stat-label">Total Disponível</div><div class="stat-value">${totalDisp} un</div></div>
     <div class="stat-card"><div class="stat-label">Em Consignação</div><div class="stat-value">${totalCons} un</div></div>
-    <div class="stat-card"><div class="stat-label">Valor em Estoque</div><div class="stat-value money">${fmtMoeda(valorDisp)}</div></div>
-  `;
-  const tb=document.querySelector('#tabela-estoque tbody');
-  if(!produtos.length){tb.innerHTML='<tr><td colspan="7" style="color:var(--text-muted);text-align:center">Nenhum produto cadastrado.</td></tr>';return;}
-  tb.innerHTML=produtos.map(p=>{
-    const saldo=calcularSaldoEstoque(p.id);
-    const consignado=entregas.filter(e=>e.prodId===p.id).reduce((a,e)=>a+e.qtd,0);
-    const movs=load(KEYS.movs).filter(m=>m.prodId===p.id&&m.tipo==='entrada');
-    const totalProd=movs.reduce((a,m)=>a+m.qtd,0);
-    const custoMedio=p.custoMedio||0;
-    const valorEst=Math.max(0,saldo)*custoMedio;
-    const status=saldo<=0?'<span class="badge badge-red">⚠ Zerado</span>':saldo<=5?'<span class="badge badge-gold">⚠ Baixo</span>':'<span class="badge badge-green">OK</span>';
-    return`<tr>
-      <td><strong>${p.nome}</strong></td>
-      <td><strong style="font-size:16px;color:${saldo<=0?'var(--red-alert)':saldo<=5?'#856404':'var(--green-ok)'}">${Math.max(0,saldo)}</strong></td>
-      <td>${consignado}</td>
-      <td>${totalProd}</td>
-      <td>${custoMedio>0?fmtMoeda(custoMedio):'—'}</td>
-      <td>${valorEst>0?fmtMoeda(valorEst):'—'}</td>
-      <td>${status}</td>
-    </tr>`;
-  }).join('');
+    <div class="stat-card"><div class="stat-label">Valor em Estoque</div><div class="stat-value money">${fmtMoeda(valorDisp)}</div></div>`;
+  document.querySelector('#tabela-estoque tbody').innerHTML=rows.join('');
 }
-
-function renderHistoricoEstoque(){
+async function renderHistoricoEstoque(){
   const filtro=document.getElementById('filtro-est-produto')?.value||'';
-  let movs=load(KEYS.movs);
-  if(filtro)movs=movs.filter(m=>m.prodId===filtro);
-  movs=movs.slice().reverse();
+  let params='order=id.desc';
+  if(filtro)params=`prod_id=eq.${filtro}&order=id.desc`;
+  const movs=await DB.query('movimentacoes',params);
   const tb=document.querySelector('#tabela-movimentacoes tbody');
   if(!movs.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--text-muted);text-align:center">Nenhuma movimentação.</td></tr>';return;}
-  // Calcular saldo progressivo por produto
-  const saldos={};
-  const movsAsc=[...movs].reverse();
-  movsAsc.forEach(m=>{
-    if(!saldos[m.prodId])saldos[m.prodId]=0;
-    if(m.tipo==='entrada')saldos[m.prodId]+=m.qtd;
-    else saldos[m.prodId]-=m.qtd;
-    m._saldo=saldos[m.prodId];
-  });
   tb.innerHTML=movs.map(m=>`<tr>
-    <td>${fmtData(m.data)}</td>
-    <td>${m.prodNome}</td>
+    <td>${fmtData(m.data)}</td><td>${m.prod_nome}</td>
     <td><span class="badge ${m.tipo==='entrada'?'badge-green':'badge-gold'}">${m.tipo==='entrada'?'⬆ Entrada':'⬇ Saída'}</span></td>
     <td><strong>${m.tipo==='entrada'?'+':'−'}${m.qtd}</strong></td>
     <td>${m.destino||'—'}</td>
-    <td><strong>${m._saldo}</strong></td>
+    <td>${m.custo>0?fmtMoeda(m.custo):'—'}</td>
   </tr>`).join('');
 }
 
-// popularSelectProdutos com opção todos
-function popularSelectProdutos(elId,comTodos=false){
-  const el=document.getElementById(elId);if(!el)return;
-  el.innerHTML=(comTodos?'<option value="">Todos os produtos</option>':'<option value="">Selecione...</option>')+
-    load(KEYS.produtos).map(p=>`<option value="${p.id}" data-preco="${p.preco}">${p.nome} — ${fmtMoeda(p.preco)}</option>`).join('');
-}
-
 // ── DASHBOARD ──
-function renderDashboard(){
-  const pontos=load(KEYS.pontos);
-  const entregas=load(KEYS.entregas).filter(e=>e.status==='ativo');
-  const acertos=load(KEYS.acertos);
-  const pedidos=load(KEYS.pedidos);
+async function renderDashboard(){
+  showLoading('Carregando painel...');
+  const pontos=await DB.getAll('pontos');
+  const entregas=await DB.query('entregas','status=eq.ativo');
+  const acertos=await DB.getAll('acertos');
+  const pedidos=await DB.getAll('pedidos');
   const ti=entregas.reduce((a,e)=>a+e.qtd,0);
   const tv=entregas.reduce((a,e)=>a+(e.qtd*e.preco),0);
   const trec=acertos.reduce((a,x)=>a+x.valor,0);
@@ -915,37 +939,35 @@ function renderDashboard(){
     ${semSig>0?`<div class="stat-card"><div class="stat-label">Sem Assinatura</div><div class="stat-value alert">${semSig}</div></div>`:''}
   `;
   const tb=document.querySelector('#tabela-saldo tbody');
-  if(!pontos.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--text-muted);text-align:center;padding:20px">Cadastre pontos para começar.</td></tr>';return;}
-  tb.innerHTML=pontos.map(p=>{
-    const ents=load(KEYS.entregas).filter(e=>e.pontoId===p.id&&e.status==='ativo');
+  if(!pontos.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--text-muted);text-align:center;padding:20px">Cadastre pontos para começar.</td></tr>';hideLoading();return;}
+  const rows=await Promise.all(pontos.map(async p=>{
+    const ents=entregas.filter(e=>e.ponto_id===p.id);
     const it=ents.reduce((a,e)=>a+e.qtd,0);const vl=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
     const assin=ents.filter(e=>e.assinatura).length;
     const sigB=ents.length===0?'—':assin===ents.length?`<span class="badge badge-green">✅ ${assin}/${ents.length}</span>`:`<span class="badge badge-red">⚠ ${assin}/${ents.length}</span>`;
     const st=vl===0?'<span class="badge badge-green">Zerado</span>':vl>100?'<span class="badge badge-red">⚠ Cobrar</span>':'<span class="badge badge-gold">Em andamento</span>';
     return`<tr><td><strong>${p.nome}</strong></td><td>${p.resp}</td><td>${it}</td><td style="color:var(--green-ok);font-weight:700">${fmtMoeda(vl)}</td><td>${sigB}</td><td>${st}</td></tr>`;
-  }).join('');
+  }));
+  tb.innerHTML=rows.join('');
   const pends=pedidos.filter(p=>p.status==='pendente');
   const cp=document.getElementById('card-pedidos');
-  // Check low stock
-  const produtos=load(KEYS.produtos);
-  const lowStock=produtos.filter(p=>calcularSaldoEstoque(p.id)<=5&&calcularSaldoEstoque(p.id)>=0);
-  if(lowStock.length>0){
-    showAlert(`⚠ Estoque baixo: ${lowStock.map(p=>p.nome+' ('+Math.max(0,calcularSaldoEstoque(p.id))+' un)').join(', ')}!`,'error');
-  }
   if(pends.length){
     cp.style.display='block';
-    document.querySelector('#tabela-pedidos-dash tbody').innerHTML=pends.map(p=>`<tr><td>${p.pontoNome}</td><td>${p.prodNome}</td><td>${p.qtd}</td><td>${fmtData(p.data)}</td><td>${p.obs||'—'}</td><td><button class="btn btn-green btn-sm" onclick="atenderPedido('${p.id}')">✅ Atendido</button></td></tr>`).join('');
-    showAlert(`📩 ${pends.length} pedido(s) pendente(s)!`,'success');
+    document.querySelector('#tabela-pedidos-dash tbody').innerHTML=pends.map(p=>`<tr><td>${p.ponto_nome}</td><td>${p.prod_nome}</td><td>${p.qtd}</td><td>${fmtData(p.data)}</td><td>${p.obs||'—'}</td><td><button class="btn btn-green btn-sm" onclick="atenderPedido('${p.id}')">✅ Atendido</button></td></tr>`).join('');
   } else cp.style.display='none';
+  hideLoading();
 }
-
-function atenderPedido(id){save(KEYS.pedidos,load(KEYS.pedidos).map(p=>p.id===id?{...p,status:'atendido'}:p));renderDashboard();}
+async function atenderPedido(id){
+  await DB.update('pedidos',id,{status:'atendido'});
+  renderDashboard();
+}
 
 // ── ACESSO PONTO ──
 let pontoLogado=null;
-function entrarAcesso(){
+async function entrarAcesso(){
   const codigo=document.getElementById('acesso-codigo').value.trim();
-  const ponto=load(KEYS.pontos).find(p=>p.codigo===codigo);
+  const rows=await DB.query('pontos',`codigo=eq.${codigo}`);
+  const ponto=rows?.[0];
   if(!ponto){document.getElementById('acesso-erro').innerHTML='<div class="alert alert-error">Código inválido.</div>';return;}
   pontoLogado=ponto;
   document.getElementById('acesso-login').style.display='none';
@@ -954,63 +976,77 @@ function entrarAcesso(){
   document.getElementById('acesso-resp-ponto').textContent='👤 '+ponto.resp;
   renderAcessoDashboard();
 }
-function sairAcesso(){pontoLogado=null;document.getElementById('acesso-login').style.display='block';document.getElementById('acesso-dashboard').style.display='none';document.getElementById('acesso-codigo').value='';document.getElementById('acesso-erro').innerHTML='';}
-function renderAcessoDashboard(){
+function sairAcesso(){
+  pontoLogado=null;
+  document.getElementById('acesso-login').style.display='block';
+  document.getElementById('acesso-dashboard').style.display='none';
+  document.getElementById('acesso-codigo').value='';
+  document.getElementById('acesso-erro').innerHTML='';
+}
+async function renderAcessoDashboard(){
   if(!pontoLogado)return;
-  const ents=load(KEYS.entregas).filter(e=>e.pontoId===pontoLogado.id&&e.status==='ativo');
+  const ents=await DB.query('entregas',`ponto_id=eq.${pontoLogado.id}&status=eq.ativo`);
   const ti=ents.reduce((a,e)=>a+e.qtd,0);const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
-  document.getElementById('acesso-stats').innerHTML=`<div class="stat-card"><div class="stat-label">Itens com você</div><div class="stat-value">${ti}</div></div><div class="stat-card"><div class="stat-label">Valor em aberto</div><div class="stat-value alert">${fmtMoeda(tv)}</div></div>`;
+  document.getElementById('acesso-stats').innerHTML=`
+    <div class="stat-card"><div class="stat-label">Itens com você</div><div class="stat-value">${ti}</div></div>
+    <div class="stat-card"><div class="stat-label">Valor em aberto</div><div class="stat-value alert">${fmtMoeda(tv)}</div></div>`;
   const tb=document.querySelector('#acesso-tabela-items tbody');
   if(!ents.length)tb.innerHTML='<tr><td colspan="4" style="color:var(--text-muted);text-align:center">Nenhum item.</td></tr>';
   else{
-    const map={};ents.forEach(e=>{if(!map[e.prodNome])map[e.prodNome]={qtd:0,preco:e.preco};map[e.prodNome].qtd+=e.qtd;});
+    const map={};ents.forEach(e=>{if(!map[e.prod_nome])map[e.prod_nome]={qtd:0,preco:e.preco};map[e.prod_nome].qtd+=e.qtd;});
     tb.innerHTML=Object.entries(map).map(([n,v])=>`<tr><td>${n}</td><td><strong>${v.qtd}</strong></td><td>${fmtMoeda(v.preco)}</td><td style="color:var(--green-ok);font-weight:700">${fmtMoeda(v.qtd*v.preco)}</td></tr>`).join('');
   }
-  popularSelectProdutos('acesso-prod-pedido');
-  const ac=load(KEYS.acertos).filter(a=>a.pontoId===pontoLogado.id).slice().reverse();
+  await popularSelectProdutos('acesso-prod-pedido');
+  const ac=await DB.query('acertos',`ponto_id=eq.${pontoLogado.id}&order=id.desc`);
   const tbAc=document.querySelector('#acesso-acertos tbody');
   if(!ac.length)tbAc.innerHTML='<tr><td colspan="4" style="color:var(--text-muted);text-align:center">Nenhum acerto.</td></tr>';
   else tbAc.innerHTML=ac.map(a=>`<tr><td>${fmtData(a.data)}</td><td style="color:var(--green-ok);font-weight:700">${fmtMoeda(a.valor)}</td><td>${a.dev||0} un</td><td>${a.obs||'—'}</td></tr>`).join('');
   renderPedidosPonto();
 }
-function fazerPedido(){
+async function fazerPedido(){
   if(!pontoLogado)return;
   const prodId=document.getElementById('acesso-prod-pedido').value;
   const qtd=parseInt(document.getElementById('acesso-qtd-pedido').value);
   const obs=document.getElementById('acesso-obs-pedido').value.trim();
   if(!prodId||!qtd)return alert('Selecione produto e quantidade.');
-  const produto=load(KEYS.produtos).find(p=>p.id===prodId);
-  const pedidos=load(KEYS.pedidos);
-  pedidos.push({id:uid(),pontoId:pontoLogado.id,pontoNome:pontoLogado.nome,prodId,prodNome:produto.nome,qtd,obs,data:hoje(),status:'pendente'});
-  save(KEYS.pedidos,pedidos);
+  const prods=await DB.query('produtos',`id=eq.${prodId}`);
+  const produto=prods?.[0];
+  await DB.insert('pedidos',{id:uid(),ponto_id:pontoLogado.id,ponto_nome:pontoLogado.nome,prod_id:prodId,prod_nome:produto.nome,qtd,obs,data:hoje(),status:'pendente'});
   document.getElementById('acesso-qtd-pedido').value='';document.getElementById('acesso-obs-pedido').value='';
-  renderPedidosPonto();alert(`✅ Pedido de ${qtd} ${produto.nome} enviado!`);
+  renderPedidosPonto();
+  alert(`✅ Pedido de ${qtd} ${produto.nome} enviado!`);
 }
-function renderPedidosPonto(){
+async function renderPedidosPonto(){
   if(!pontoLogado)return;
-  const pedidos=load(KEYS.pedidos).filter(p=>p.pontoId===pontoLogado.id).slice().reverse();
+  const pedidos=await DB.query('pedidos',`ponto_id=eq.${pontoLogado.id}&order=id.desc`);
   const el=document.getElementById('acesso-pedidos-lista');
   if(!pedidos.length){el.innerHTML='Nenhum pedido enviado.';return;}
-  el.innerHTML=pedidos.map(p=>`<div style="padding:8px 0;border-bottom:1px solid var(--toast)">📩 <strong>${p.qtd} ${p.prodNome}</strong> — ${fmtData(p.data)} <span class="badge ${p.status==='pendente'?'badge-gold':'badge-green'}">${p.status}</span>${p.obs?`<br><small style="color:var(--text-muted)">${p.obs}</small>`:''}</div>`).join('');
+  el.innerHTML=pedidos.map(p=>`<div style="padding:8px 0;border-bottom:1px solid var(--toast)">📩 <strong>${p.qtd} ${p.prod_nome}</strong> — ${fmtData(p.data)} <span class="badge ${p.status==='pendente'?'badge-gold':'badge-green'}">${p.status}</span>${p.obs?`<br><small style="color:var(--text-muted)">${p.obs}</small>`:''}</div>`).join('');
 }
 
 // ── HELPERS ──
 function fecharModal(id){document.getElementById(id).classList.remove('open');}
-function showAlert(msg,tipo){const el=document.getElementById('alert-global');if(!el)return;el.innerHTML=`<div class="alert alert-${tipo==='success'?'success':'error'}">${msg}</div>`;setTimeout(()=>el.innerHTML='',4000);}
+function showAlert(msg,tipo){
+  const el=document.getElementById('alert-global');if(!el)return;
+  el.innerHTML=`<div class="alert alert-${tipo==='success'?'success':'error'}">${msg}</div>`;
+  setTimeout(()=>el.innerHTML='',4000);
+}
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
 document.getElementById('ent-data').value=hoje();
 document.getElementById('acerto-data').value=hoje();
 
-// Seed demo
-if(!load(KEYS.produtos).length){
-  const p=load(KEYS.produtos);
-  p.push({id:uid(),nome:'Brownie Tradicional',cat:'brownie',preco:7.00,unidade:'un',desc:'Chocolate meio amargo'});
-  p.push({id:uid(),nome:'Brownie Recheado',cat:'brownie',preco:9.00,unidade:'un',desc:'Com doce de leite'});
-  save(KEYS.produtos,p);
-}
-
 rotear();
 renderDashboard();
 </script>
+
+<!-- MODAL DIALOGO EXCLUSÃO -->
+<div class="modal-overlay" id="modal-dialogo-excluir">
+  <div class="modal" style="max-width:480px">
+    <button class="modal-close" onclick="fecharModal('modal-dialogo-excluir')">✕</button>
+    <div class="modal-title">🗑 Excluir Entrega</div>
+    <div id="dialogo-excluir-content"></div>
+  </div>
+</div>
+
 </body>
 </html>
