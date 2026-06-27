@@ -735,6 +735,7 @@ async function renderPontos(){
       <div class="ponto-actions">
         <button class="btn btn-outline btn-sm" onclick="showSection('entregas');setTimeout(()=>{document.getElementById('ent-ponto').value='${p.id}'},300)">🚚 Entregar</button>
         <button class="btn btn-gold btn-sm" onclick="copiarLinkPonto('${p.codigo}','${p.nome}')">🔗 Link</button>
+        <button class="btn btn-outline btn-sm" onclick="editarPonto('${p.id}')">✏️ Editar</button>
         <button class="btn btn-danger btn-sm" onclick="excluirPonto('${p.id}')">🗑</button>
       </div>
     </div>`;
@@ -745,6 +746,36 @@ async function excluirPonto(id){
   await DB.delete('pontos',id);
   renderPontos();
 }
+async function editarPonto(id){
+  const rows=await DB.query('pontos',`id=eq.${id}`);
+  const p=rows?.[0];if(!p)return;
+  document.getElementById('ep-id').value=id;
+  document.getElementById('ep-nome').value=p.nome||'';
+  document.getElementById('ep-resp').value=p.resp||'';
+  document.getElementById('ep-tel').value=p.tel||'';
+  document.getElementById('ep-end').value=p.endereco||'';
+  document.getElementById('ep-codigo').value=p.codigo||'';
+  document.getElementById('ep-cnpj').value=p.cnpj||'';
+  document.getElementById('ep-razao').value=p.razao||'';
+  document.getElementById('modal-editar-ponto').classList.add('open');
+}
+async function confirmarEdicaoPonto(){
+  const id=document.getElementById('ep-id').value;
+  const nome=document.getElementById('ep-nome').value.trim();
+  const resp=document.getElementById('ep-resp').value.trim();
+  if(!nome||!resp)return alert('Nome e Responsável são obrigatórios.');
+  await DB.update('pontos',id,{
+    nome,resp,
+    tel:document.getElementById('ep-tel').value.trim(),
+    endereco:document.getElementById('ep-end').value.trim(),
+    codigo:document.getElementById('ep-codigo').value.trim(),
+    cnpj:document.getElementById('ep-cnpj').value.trim(),
+    razao:document.getElementById('ep-razao').value.trim()
+  });
+  fecharModal('modal-editar-ponto');
+  renderPontos();
+  showAlert('Ponto atualizado! ✅','success');
+}
 
 // ── PRODUTOS ──
 async function salvarProduto(){
@@ -753,12 +784,20 @@ async function salvarProduto(){
   if(!nome||!preco)return alert('Preencha Nome e Preço.');
   const prefixo=document.getElementById('prod-prefixo').value.trim()||'789123456';
   showLoading('Gerando código de barras...');
-  const ean13=await proximoSequencial(prefixo);
-  await DB.insert('produtos',{id:uid(),nome,cat:document.getElementById('prod-cat').value,preco,unidade:document.getElementById('prod-unidade').value,descricao:document.getElementById('prod-desc').value.trim(),custo_medio:0,ean13});
-  ['prod-nome','prod-preco','prod-desc'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('barcode-preview-wrap').style.display='none';
-  hideLoading();
-  renderProdutos();showAlert('Produto cadastrado com código '+ean13+'! ✅','success');
+  try{
+    const ean13=await proximoSequencial(prefixo);
+    const res=await DB.insert('produtos',{id:uid(),nome,cat:document.getElementById('prod-cat').value,preco,unidade:document.getElementById('prod-unidade').value,descricao:document.getElementById('prod-desc').value.trim(),custo_medio:0,ean13});
+    if(!res){throw new Error('Supabase retornou vazio. Verifique se a coluna ean13 existe na tabela produtos (rode o supabase_ean13.sql).');}
+    ['prod-nome','prod-preco','prod-desc'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('barcode-preview-wrap').style.display='none';
+    hideLoading();
+    renderProdutos();
+    showAlert('Produto cadastrado com código '+ean13+'! ✅','success');
+  }catch(e){
+    hideLoading();
+    showAlert('Erro ao salvar produto: '+e.message,'error');
+    console.error('Erro salvarProduto:',e);
+  }
 }
 async function renderProdutos(){
   const p=await DB.getAll('produtos');
@@ -1456,6 +1495,24 @@ async function verificarAlertasValidade(){
 
 rotear();
 </script>
+
+<!-- MODAL EDITAR PONTO -->
+<div class="modal-overlay" id="modal-editar-ponto">
+  <div class="modal"><button class="modal-close" onclick="fecharModal('modal-editar-ponto')">✕</button>
+    <div class="modal-title">✏️ Editar Ponto de Venda</div>
+    <input type="hidden" id="ep-id">
+    <div class="form-grid">
+      <div class="form-group"><label>Nome *</label><input type="text" id="ep-nome"></div>
+      <div class="form-group"><label>Responsável *</label><input type="text" id="ep-resp"></div>
+      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="ep-tel"></div>
+      <div class="form-group"><label>Endereço</label><input type="text" id="ep-end"></div>
+      <div class="form-group"><label>Código de Acesso</label><input type="text" id="ep-codigo" maxlength="6"></div>
+      <div class="form-group"><label>CNPJ</label><input type="text" id="ep-cnpj"></div>
+      <div class="form-group"><label>Razão Social</label><input type="text" id="ep-razao"></div>
+    </div>
+    <div style="margin-top:16px"><button class="btn btn-primary" onclick="confirmarEdicaoPonto()">💾 Salvar Alterações</button></div>
+  </div>
+</div>
 
 <!-- MODAL CÓDIGO DE BARRAS -->
 <div class="modal-overlay" id="modal-barcode">
