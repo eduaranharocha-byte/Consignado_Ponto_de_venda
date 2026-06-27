@@ -163,6 +163,7 @@
     <button class="tab-btn" onclick="showSection('acertos')">💰 Acertos</button>
     <button class="tab-btn" onclick="showSection('acesso-ponto')">🔑 Acesso Ponto</button>
     <button class="tab-btn" onclick="showSection('estoque')">📦 Estoque</button>
+    <button class="tab-btn" onclick="showSection('validade')">📅 Validade</button>
     <button class="tab-btn" onclick="logoutAdmin()" style="background:rgba(255,255,255,.1);margin-left:8px">🔒 Sair</button>
   </div>
 </header>
@@ -257,6 +258,15 @@
       <div class="form-group"><label>Preço Negociado (R$) *</label><input type="number" id="ent-preco" placeholder="0,00" step="0.01" min="0"></div>
       <div class="form-group"><label>Data</label><input type="date" id="ent-data"></div>
       <div class="form-group"><label>Observação</label><input type="text" id="ent-obs" placeholder="Opcional"></div>
+      <div class="form-group">
+        <label>📅 Lote — Data de Fabricação</label>
+        <input type="date" id="ent-lote" onchange="previewValidadeEntrega()">
+        <small style="color:var(--text-muted);font-size:11px">Validade calculada automaticamente (fabricação + 7 dias)</small>
+      </div>
+      <div class="form-group" id="ent-validade-preview" style="display:none">
+        <label>Validade calculada</label>
+        <div id="ent-validade-texto" style="padding:10px 14px;border-radius:10px;border:1.5px solid var(--toast);background:var(--cream);font-size:14px;font-weight:600"></div>
+      </div>
     </div>
     <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarEntrega()">📦 Registrar e Gerar Link</button></div>
     <div id="link-assinatura-box" class="link-box" style="display:none">
@@ -373,6 +383,38 @@
       <thead><tr><th>Data</th><th>Produto</th><th>Tipo</th><th>Qtd</th><th>Destino/Origem</th><th>Saldo</th></tr></thead>
       <tbody></tbody>
     </table></div>
+  </div>
+</div>
+
+<!-- VALIDADE -->
+<div id="sec-validade" class="section">
+  <!-- Alertas urgentes -->
+  <div id="val-alertas-urgentes"></div>
+
+  <div class="card">
+    <div class="card-title">📅 Controle de Validade por Lote</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+      Os lotes são criados automaticamente ao registrar uma entrega com <strong>Data de Fabricação</strong>.
+      A validade = fabricação + 7 dias. Alertas aparecem <strong>1 dia antes</strong> do vencimento.
+    </p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <select id="filtro-val-ponto" onchange="renderValidade()" style="padding:7px 12px;border-radius:8px;border:1.5px solid var(--toast)">
+        <option value="">Todos os pontos</option>
+      </select>
+      <select id="filtro-val-status" onchange="renderValidade()" style="padding:7px 12px;border-radius:8px;border:1.5px solid var(--toast)">
+        <option value="">Todos os status</option>
+        <option value="ok">✅ Dentro do prazo</option>
+        <option value="aviso">⚠️ Vence amanhã</option>
+        <option value="urgente">🔴 Vence hoje</option>
+        <option value="vencido">❌ Vencido</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table id="tabela-validade">
+        <thead><tr><th>Produto</th><th>Ponto</th><th>Lote (fabricação)</th><th>Validade</th><th>Dias restantes</th><th>Qtd</th><th>Status</th><th>Contato</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -632,7 +674,7 @@ function showSection(id){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('sec-'+id).classList.add('active');
-  const map={dashboard:0,pontos:1,produtos:2,entregas:3,acertos:4,'acesso-ponto':5,estoque:6};
+  const map={dashboard:0,pontos:1,produtos:2,entregas:3,acertos:4,'acesso-ponto':5,estoque:6,validade:7};
   document.querySelectorAll('.tab-btn')[map[id]]?.classList.add('active');
   if(id==='dashboard')renderDashboard();
   if(id==='pontos')renderPontos();
@@ -640,6 +682,7 @@ function showSection(id){
   if(id==='entregas'){popularSelectPontos('ent-ponto');popularSelectPontos('filtro-ent-ponto',true);popularSelectProdutos('ent-produto');renderEntregas();}
   if(id==='acertos'){popularSelectPontos('acerto-ponto');renderAcertos();}
   if(id==='estoque'){popularSelectProdutos('est-produto');popularSelectProdutos('filtro-est-produto',true);renderEstoque();renderHistoricoEstoque();}
+  if(id==='validade')renderValidade();
 }
 
 // ── PONTOS ──
@@ -764,6 +807,8 @@ async function salvarEntrega(){
   const preco=parseFloat(document.getElementById('ent-preco').value);
   const data=document.getElementById('ent-data').value||hoje();
   const obs=document.getElementById('ent-obs').value.trim();
+  const lote_fabricacao=document.getElementById('ent-lote').value||null;
+  const validade_lote = lote_fabricacao ? (()=>{ const v=new Date(lote_fabricacao+'T12:00:00'); v.setDate(v.getDate()+7); return v.toISOString().slice(0,10); })() : null;
   if(!pontoId||!prodId||!qtd||!preco)return alert('Preencha todos os campos obrigatórios.');
   const pontos=await DB.query('pontos',`id=eq.${pontoId}`);
   const ponto=pontos?.[0];
@@ -771,9 +816,10 @@ async function salvarEntrega(){
   const produto=prods?.[0];
   const novaId=uid();
   showLoading('Registrando entrega...');
-  await DB.insert('entregas',{id:novaId,ponto_id:pontoId,prod_id:prodId,ponto_nome:ponto.nome,prod_nome:produto.nome,qtd,preco,data,obs,status:'ativo',assinatura:null,data_assinatura:null});
+  await DB.insert('entregas',{id:novaId,ponto_id:pontoId,prod_id:prodId,ponto_nome:ponto.nome,prod_nome:produto.nome,ponto_tel:ponto.tel||null,ponto_resp:ponto.resp||null,qtd,preco,data,obs,status:'ativo',assinatura:null,data_assinatura:null,lote_fabricacao,validade_lote});
   await DB.insert('movimentacoes',{id:uid(),prod_id:prodId,prod_nome:produto.nome,tipo:'saida',qtd,custo:0,motivo:'entrega',destino:ponto.nome,data,ref:novaId});
-  ['ent-qtd','ent-preco','ent-obs'].forEach(id=>document.getElementById(id).value='');
+  ['ent-qtd','ent-preco','ent-obs','ent-lote'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ent-validade-preview').style.display='none';
   renderEntregas();
   mostrarLinkAssinatura(novaId);
   hideLoading();
@@ -1129,6 +1175,7 @@ async function renderDashboard(){
     document.querySelector('#tabela-pedidos-dash tbody').innerHTML=pends.map(p=>`<tr><td>${p.ponto_nome}</td><td>${p.prod_nome}</td><td>${p.qtd}</td><td>${fmtData(p.data)}</td><td>${p.obs||'—'}</td><td><button class="btn btn-green btn-sm" onclick="atenderPedido('${p.id}')">✅ Atendido</button></td></tr>`).join('');
   } else cp.style.display='none';
   hideLoading();
+  verificarAlertasValidade();
 }
 async function atenderPedido(id){
   await DB.update('pedidos',id,{status:'atendido'});
@@ -1305,6 +1352,107 @@ function showAlert(msg,tipo){
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
 document.getElementById('ent-data').value=hoje();
 document.getElementById('acerto-data').value=hoje();
+
+// ── VALIDADE ──
+function previewValidadeEntrega(){
+  const lote = document.getElementById('ent-lote').value;
+  const preview = document.getElementById('ent-validade-preview');
+  const texto  = document.getElementById('ent-validade-texto');
+  if(!lote){ preview.style.display='none'; return; }
+  const val = new Date(lote+'T12:00:00');
+  val.setDate(val.getDate()+7);
+  const hoje = new Date(); hoje.setHours(0,0,0,0); val.setHours(0,0,0,0);
+  const diff = Math.round((val-hoje)/86400000);
+  const cor  = diff>1?'var(--green-ok)':diff===1?'#c05621':'var(--red-alert)';
+  texto.style.color = cor;
+  texto.textContent = val.toLocaleDateString('pt-BR') + ' (' + (diff>0?diff+' dias restantes':'VENCIDO') + ')';
+  preview.style.display = 'block';
+}
+
+function statusValidade(validade){
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const val  = new Date(validade+'T12:00:00'); val.setHours(0,0,0,0);
+  const diff = Math.round((val-hoje)/86400000);
+  if(diff < 0)  return {label:'Vencido', cls:'badge-red', diff, filtro:'vencido'};
+  if(diff === 0) return {label:'Vence hoje', cls:'badge-red', diff, filtro:'urgente'};
+  if(diff === 1) return {label:'Vence amanhã', cls:'badge-gold', diff, filtro:'aviso'};
+  return {label:diff+' dias', cls:'badge-green', diff, filtro:'ok'};
+}
+
+async function renderValidade(){
+  const filtroPonto  = document.getElementById('filtro-val-ponto')?.value||'';
+  const filtroStatus = document.getElementById('filtro-val-status')?.value||'';
+
+  // Popular filtro de pontos se vazio
+  const selPonto = document.getElementById('filtro-val-ponto');
+  if(selPonto && selPonto.options.length<=1){
+    const pts = await DB.getAll('pontos');
+    pts.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.textContent=p.nome; selPonto.appendChild(o); });
+  }
+
+  let params = 'lote_fabricacao=not.is.null&order=validade_lote.asc';
+  if(filtroPonto) params += `&ponto_id=eq.${filtroPonto}`;
+  const lotes = await DB.query('entregas', params);
+
+  const tb = document.querySelector('#tabela-validade tbody');
+  let rows = lotes;
+  if(filtroStatus) rows = lotes.filter(l=>{ const s=statusValidade(l.validade_lote); return s.filtro===filtroStatus; });
+
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="8" style="color:var(--text-muted);text-align:center;padding:20px">Nenhum lote encontrado.</td></tr>'; renderAlertasValidade(lotes); return; }
+
+  tb.innerHTML = rows.map(l=>{
+    const s = statusValidade(l.validade_lote);
+    const loteFmt = l.lote_fabricacao ? new Date(l.lote_fabricacao+'T12:00:00').toLocaleDateString('pt-BR') : '—';
+    const valFmt  = l.validade_lote   ? new Date(l.validade_lote+'T12:00:00').toLocaleDateString('pt-BR') : '—';
+    const waLink  = l.ponto_tel ? `<a href="https://wa.me/55${l.ponto_tel.replace(/\D/g,'')}" target="_blank" class="btn btn-whatsapp btn-sm">📱</a>` : '—';
+    const rowStyle = s.filtro==='urgente'?'background:#fff0f0':s.filtro==='aviso'?'background:#fff8e1':'';
+    return `<tr style="${rowStyle}">
+      <td><strong>${l.prod_nome}</strong></td>
+      <td>${l.ponto_nome}</td>
+      <td style="font-family:monospace;font-size:12px">${loteFmt}</td>
+      <td style="font-family:monospace;font-size:12px">${valFmt}</td>
+      <td><span class="badge ${s.cls}">${s.filtro==='urgente'?'🔴 ':s.filtro==='aviso'?'⚠️ ':s.filtro==='vencido'?'❌ ':'✅ '}${s.label}</span></td>
+      <td>${l.qtd}</td>
+      <td><span class="badge ${l.status==='ativo'?'badge-gold':'badge-green'}">${l.status==='ativo'?'Consignado':'Quitado'}</span></td>
+      <td>${waLink}</td>
+    </tr>`;
+  }).join('');
+
+  renderAlertasValidade(lotes);
+}
+
+function renderAlertasValidade(lotes){
+  const urgentes = lotes.filter(l=>{ if(!l.validade_lote) return false; const s=statusValidade(l.validade_lote); return s.filtro==='urgente'||s.filtro==='aviso'; });
+  const el = document.getElementById('val-alertas-urgentes');
+  if(!el) return;
+  if(!urgentes.length){ el.innerHTML=''; return; }
+  el.innerHTML = urgentes.map(l=>{
+    const s = statusValidade(l.validade_lote);
+    const valFmt = new Date(l.validade_lote+'T12:00:00').toLocaleDateString('pt-BR');
+    const isHoje = s.filtro==='urgente';
+    const tel = l.ponto_tel?(l.ponto_tel).replace(/\D/g,''):'';
+    const msgWa = encodeURIComponent(`Olá${l.ponto_resp?', '+l.ponto_resp:''}! O produto *${l.prod_nome}* que está em consignação vence ${isHoje?'hoje':'amanhã'} (${valFmt}). Por favor, providencie a venda ou devolução. Obrigado! 🍫`);
+    const waBtn = tel ? `<a href="https://wa.me/55${tel}?text=${msgWa}" target="_blank" class="btn btn-whatsapp btn-sm">📱 WhatsApp</a>` : '';
+    return `<div class="alert ${isHoje?'alert-error':'alert-success'}" style="${isHoje?'border-left:4px solid var(--red-alert)':'border-left:4px solid #c05621'}">
+      <strong>${isHoje?'🔴 VENCE HOJE':'⚠️ Vence amanhã'}</strong> —
+      <strong>${l.prod_nome}</strong> em <strong>${l.ponto_nome}</strong> · Validade: ${valFmt} · ${l.qtd} un
+      ${waBtn}
+    </div>`;
+  }).join('');
+}
+
+async function verificarAlertasValidade(){
+  // Chamado no dashboard — mostra banner de alerta se houver vencimentos próximos
+  const params = 'lote_fabricacao=not.is.null&status=eq.ativo&order=validade_lote.asc';
+  const lotes = await DB.query('entregas', params);
+  const urgentes = lotes.filter(l=>{ if(!l.validade_lote) return false; const s=statusValidade(l.validade_lote); return s.filtro==='urgente'||s.filtro==='aviso'; });
+  const alertGlobal = document.getElementById('alert-global');
+  if(urgentes.length && alertGlobal){
+    alertGlobal.innerHTML = `<div class="alert alert-error" style="cursor:pointer" onclick="showSection('validade')">
+      ⚠️ <strong>${urgentes.length} produto(s)</strong> com validade crítica. <u>Clique para ver →</u>
+    </div>`;
+  }
+}
 
 rotear();
 </script>
