@@ -6,6 +6,7 @@
 <title>Consignado — Gestão de Pontos</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
   :root{--cacao:#3b1f0a;--chocolate:#5c2d0e;--caramel:#c47b2b;--cream:#fdf6ed;--warm-white:#fffaf4;--toast:#e8d5b7;--gold:#d4a043;--green-ok:#2d6a4f;--green-light:#d8f3dc;--red-alert:#9d2235;--red-light:#ffe5e9;--text-main:#1e0f05;--text-muted:#7a5c42;--shadow:0 4px 24px rgba(59,31,10,.10);--radius:16px}
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -303,7 +304,7 @@
     <input type="hidden" id="acerto-valor">
     <div id="acerto-resumo" style="background:var(--cream);border-radius:12px;padding:16px;margin-top:14px;font-size:14px;display:none"></div>
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn btn-green" onclick="realizarAcerto()">✅ Registrar Acerto</button>
+      <button class="btn btn-green" onclick="abrirPagamento()">✅ Registrar Acerto</button>
       <button class="btn btn-gold" onclick="gerarReciboModal()">🧾 Ver Recibo</button>
     </div>
   </div>
@@ -1525,6 +1526,93 @@ async function verificarAlertasValidade(){
       ⚠️ <strong>${urgentes.length} produto(s)</strong> com validade crítica. <u>Clique para ver →</u>
     </div>`;
   }
+}
+
+
+// ── PIX / PAGAMENTO ──
+const PIX_CHAVE = 'edu.aranharocha@gmail.com';
+const PIX_NOME  = 'Brownie';
+const PIX_CIDADE= 'Brasil';
+let _formaPagamento = null;
+
+function abrirPagamento(){
+  const valor = parseFloat(document.getElementById('acerto-valor').value)||0;
+  if(!valor) return showAlert('Calcule o acerto antes (selecione o ponto e informe a devolução).','error');
+  document.getElementById('pag-valor-display').textContent = fmtMoeda(valor);
+  // Reset estado
+  _formaPagamento = null;
+  ['btn-pag-dinheiro','btn-pag-pix'].forEach(id=>{
+    document.getElementById(id).style.borderColor='var(--toast)';
+    document.getElementById(id).style.background='var(--cream)';
+  });
+  document.getElementById('pag-pix-area').style.display='none';
+  document.getElementById('pag-dinheiro-area').style.display='none';
+  document.getElementById('modal-pagamento').classList.add('open');
+}
+
+function selecionarPagamento(tipo){
+  _formaPagamento = tipo;
+  const ativo  = tipo==='pix'?'btn-pag-pix':'btn-pag-dinheiro';
+  const inativo= tipo==='pix'?'btn-pag-dinheiro':'btn-pag-pix';
+  document.getElementById(ativo).style.borderColor='var(--choc)';
+  document.getElementById(ativo).style.background='rgba(92,45,14,.08)';
+  document.getElementById(inativo).style.borderColor='var(--toast)';
+  document.getElementById(inativo).style.background='var(--cream)';
+
+  document.getElementById('pag-pix-area').style.display   = tipo==='pix'?'block':'none';
+  document.getElementById('pag-dinheiro-area').style.display = tipo==='dinheiro'?'block':'none';
+
+  if(tipo==='pix'){
+    const valor = parseFloat(document.getElementById('acerto-valor').value)||0;
+    gerarQRPix(valor);
+  }
+}
+
+function pixCRC16(str){
+  let crc=0xFFFF;
+  for(let i=0;i<str.length;i++){
+    crc^=str.charCodeAt(i)<<8;
+    for(let j=0;j<8;j++) crc=crc&0x8000?(crc<<1)^0x1021:(crc<<1);
+  }
+  return ((crc&0xFFFF).toString(16).toUpperCase()).padStart(4,'0');
+}
+
+function montarPixString(chave, nome, cidade, valor){
+  function campo(id,val){const t=`${id}${val.length.toString().padStart(2,'0')}${val}`;return t;}
+  const gui = campo('00','BR.GOV.BCB.PIX') + campo('01', chave);
+  const merchant = campo('26', gui);
+  const valorStr = valor>0 ? campo('54', valor.toFixed(2)) : '';
+  const nomeStr  = nome.substring(0,25).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+  const cidadeStr= cidade.substring(0,15).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+  let str = campo('00','01') + merchant + campo('52','0000') + campo('53','986') + valorStr +
+            campo('58','BR') + campo('59',nomeStr) + campo('60',cidadeStr) + campo('62',campo('05','***'));
+  str += campo('63','0000');
+  const crc = pixCRC16(str);
+  return str.slice(0,-4) + campo('63', crc);
+}
+
+function gerarQRPix(valor){
+  const pixStr = montarPixString(PIX_CHAVE, PIX_NOME, PIX_CIDADE, valor);
+  document.getElementById('pix-copia-cola').textContent = pixStr;
+  const canvas = document.getElementById('pix-qrcode');
+  QRCode.toCanvas(canvas, pixStr, {width:240, margin:2, color:{dark:'#000000',light:'#ffffff'}}, function(err){
+    if(err) console.error('QR erro:',err);
+  });
+}
+
+function copiarPix(){
+  const txt = document.getElementById('pix-copia-cola').textContent;
+  navigator.clipboard.writeText(txt).then(()=>showAlert('Pix Copia e Cola copiado!','success'));
+}
+
+async function confirmarPagamento(){
+  if(!_formaPagamento) return showAlert('Selecione a forma de pagamento.','error');
+  fecharModal('modal-pagamento');
+  // Salvar forma de pagamento na obs
+  const obsEl = document.getElementById('acerto-obs');
+  const obsAtual = obsEl.value.trim();
+  obsEl.value = (_formaPagamento==='pix'?'[Pix] ':'[Dinheiro] ') + (obsAtual||'');
+  await realizarAcerto();
 }
 
 rotear();
