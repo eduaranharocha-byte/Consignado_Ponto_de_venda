@@ -6,7 +6,7 @@
 <title>Consignado — Gestão de Pontos</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <style>
   :root{--cacao:#3b1f0a;--chocolate:#5c2d0e;--caramel:#c47b2b;--cream:#fdf6ed;--warm-white:#fffaf4;--toast:#e8d5b7;--gold:#d4a043;--green-ok:#2d6a4f;--green-light:#d8f3dc;--red-alert:#9d2235;--red-light:#ffe5e9;--text-main:#1e0f05;--text-muted:#7a5c42;--shadow:0 4px 24px rgba(59,31,10,.10);--radius:16px}
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -438,7 +438,7 @@
       </button>
     </div>
     <div id="pag-pix-area" style="display:none;text-align:center;margin-top:16px">
-      <canvas id="pix-qrcode" style="border-radius:12px;border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.15)"></canvas>
+      <div id="pix-qrcode" style="display:inline-block;border-radius:12px;border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.15);background:#fff;padding:8px"></div>
       <div style="margin-top:12px;font-size:12px;color:var(--text-muted)">Mostre o QR Code para o cliente escanear</div>
       <div style="margin-top:8px;background:var(--cream);border-radius:8px;padding:10px;font-size:10px;word-break:break-all;color:var(--text-muted);cursor:pointer" id="pix-copia-cola" onclick="copiarPix()"></div>
       <button class="btn btn-outline btn-sm" onclick="copiarPix()" style="margin-top:8px">📋 Copiar Pix Copia e Cola</button>
@@ -1629,9 +1629,15 @@ function montarPixString(chave, nome, cidade, valor){
 function gerarQRPix(valor){
   const pixStr = montarPixString(PIX_CHAVE, PIX_NOME, PIX_CIDADE, valor);
   document.getElementById('pix-copia-cola').textContent = pixStr;
-  const canvas = document.getElementById('pix-qrcode');
-  QRCode.toCanvas(canvas, pixStr, {width:240, margin:2, color:{dark:'#000000',light:'#ffffff'}}, function(err){
-    if(err) console.error('QR erro:',err);
+  const el = document.getElementById('pix-qrcode');
+  el.innerHTML = ''; // limpa anterior
+  new QRCode(el, {
+    text: pixStr,
+    width: 240,
+    height: 240,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
   });
 }
 
