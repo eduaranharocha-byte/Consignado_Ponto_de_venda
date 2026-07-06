@@ -296,10 +296,11 @@
     <div class="form-grid">
       <div class="form-group"><label>Ponto *</label><select id="acerto-ponto" onchange="calcularAcerto()"></select></div>
       <div class="form-group"><label>Data</label><input type="date" id="acerto-data"></div>
-      <div class="form-group"><label>Valor Recebido (R$)</label><input type="number" id="acerto-valor" placeholder="0,00" step="0.01"></div>
-      <div class="form-group"><label>Qtd Devolvida</label><input type="number" id="acerto-dev" placeholder="0" min="0"></div>
+      <div class="form-group"><label>Qtd Devolvida</label><input type="number" id="acerto-dev" placeholder="0" min="0" oninput="calcularAcerto()"></div>
       <div class="form-group"><label>Observação</label><input type="text" id="acerto-obs" placeholder="Opcional"></div>
     </div>
+    <!-- campo oculto — preenchido automaticamente pelo calcularAcerto -->
+    <input type="hidden" id="acerto-valor">
     <div id="acerto-resumo" style="background:var(--cream);border-radius:12px;padding:16px;margin-top:14px;font-size:14px;display:none"></div>
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn btn-green" onclick="realizarAcerto()">✅ Registrar Acerto</button>
@@ -915,11 +916,42 @@ async function excluirEntrega(id){
 // ── ACERTOS ──
 async function calcularAcerto(){
   const pontoId=document.getElementById('acerto-ponto').value;
-  if(!pontoId){document.getElementById('acerto-resumo').style.display='none';return;}
+  const r=document.getElementById('acerto-resumo');
+  if(!pontoId){r.style.display='none';return;}
   const ents=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
-  const ti=ents.reduce((a,e)=>a+e.qtd,0);const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
-  const r=document.getElementById('acerto-resumo');r.style.display='block';
-  r.innerHTML=`<strong>Em aberto</strong><br>Itens: <strong>${ti}</strong> · Total: <strong style="color:var(--green-ok)">${fmtMoeda(tv)}</strong>${ents.map(e=>`<br>— ${e.prod_nome}: ${e.qtd}×${fmtMoeda(e.preco)} = ${fmtMoeda(e.qtd*e.preco)}`).join('')}`;
+  const ti=ents.reduce((a,e)=>a+e.qtd,0);
+  const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
+  const dev=parseInt(document.getElementById('acerto-dev').value)||0;
+  // Calcula valor das devoluções (usa preço médio ponderado)
+  let devRestante=dev; let valorDev=0;
+  for(const e of ents){
+    if(devRestante<=0)break;
+    const abate=Math.min(devRestante,e.qtd);
+    valorDev+=abate*e.preco; devRestante-=abate;
+  }
+  const valorAPagar=Math.max(0,tv-valorDev);
+  // Guarda no campo oculto para realizarAcerto usar
+  document.getElementById('acerto-valor').value=valorAPagar.toFixed(2);
+  r.style.display='block';
+  const vendido=ti-dev;
+  r.innerHTML=`
+    <div style="margin-bottom:10px"><strong>Em aberto</strong> · ${ti} itens · <span style="color:var(--text-muted)">Total consignado: ${fmtMoeda(tv)}</span></div>
+    ${ents.map(e=>`<div style="font-size:13px;color:var(--text-muted)">— ${e.prod_nome}: ${e.qtd}×${fmtMoeda(e.preco)} = ${fmtMoeda(e.qtd*e.preco)}</div>`).join('')}
+    <hr style="margin:12px 0;border:none;border-top:1px solid var(--toast)">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center">
+      <div style="background:#f5f0e8;border-radius:8px;padding:10px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">DEVOLVIDO</div>
+        <div style="font-size:18px;font-weight:800;color:var(--text)">${dev} un</div>
+      </div>
+      <div style="background:#f5f0e8;border-radius:8px;padding:10px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">VENDIDO</div>
+        <div style="font-size:18px;font-weight:800;color:var(--choc)">${Math.max(0,vendido)} un</div>
+      </div>
+      <div style="background:#e8f5e9;border-radius:8px;padding:10px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">A RECEBER</div>
+        <div style="font-size:20px;font-weight:900;color:var(--green-ok)">${fmtMoeda(valorAPagar)}</div>
+      </div>
+    </div>`;
 }
 async function realizarAcerto(){
   const pontoId=document.getElementById('acerto-ponto').value;
@@ -928,7 +960,7 @@ async function realizarAcerto(){
   const data=document.getElementById('acerto-data').value||hoje();
   const obs=document.getElementById('acerto-obs').value.trim();
   if(!pontoId)return alert('Selecione o ponto.');
-  if(!valor&&!dev)return alert('Informe valor recebido ou qtd devolvida.');
+  // valor é calculado automaticamente por calcularAcerto()
   const pontos=await DB.query('pontos',`id=eq.${pontoId}`);
   const ponto=pontos?.[0];
   showLoading('Registrando acerto...');
@@ -941,7 +973,8 @@ async function realizarAcerto(){
   const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
   if(valor>=tv&&valor>0){for(const e of ents){if(e.status!=='quitado')await DB.update('entregas',e.id,{status:'quitado'});}}
   await DB.insert('acertos',{id:uid(),ponto_id:pontoId,ponto_nome:ponto.nome,valor,dev,data,obs});
-  ['acerto-valor','acerto-dev','acerto-obs'].forEach(id=>document.getElementById(id).value='');
+  ['acerto-dev','acerto-obs'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('acerto-valor').value='';
   document.getElementById('acerto-resumo').style.display='none';
   hideLoading();
   renderAcertos();showAlert(`Acerto de ${fmtMoeda(valor)} registrado para ${ponto.nome}! 💰`,'success');
@@ -965,7 +998,8 @@ async function gerarReciboModal(){
   const pontos=await DB.query('pontos',`id=eq.${pontoId}`);
   const ponto=pontos?.[0];
   const entregas=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
-  mostrarRecibo({ponto,valor:parseFloat(document.getElementById('acerto-valor').value)||0,dev:parseInt(document.getElementById('acerto-dev').value)||0,data:document.getElementById('acerto-data').value||hoje(),obs:document.getElementById('acerto-obs').value.trim(),entregas,id:'PREV-'+Date.now()});
+  const valorCalc=parseFloat(document.getElementById('acerto-valor').value)||0;
+  mostrarRecibo({ponto,valor:valorCalc,dev:parseInt(document.getElementById('acerto-dev').value)||0,data:document.getElementById('acerto-data').value||hoje(),obs:document.getElementById('acerto-obs').value.trim(),entregas,id:'PREV-'+Date.now()});
 }
 async function verReciboAcerto(id){
   const rows=await DB.query('acertos',`id=eq.${id}`);
