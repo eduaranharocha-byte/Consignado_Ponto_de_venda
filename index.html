@@ -423,6 +423,37 @@
 </div></div>
 
 <!-- MODAIS -->
+<!-- MODAL PAGAMENTO -->
+<div class="modal-overlay" id="modal-pagamento">
+  <div class="modal" style="max-width:420px">
+    <button class="modal-close" onclick="fecharModal('modal-pagamento')">✕</button>
+    <div class="modal-title">💳 Forma de Pagamento</div>
+    <div id="pag-valor-display" style="text-align:center;margin:10px 0 20px;font-size:28px;font-weight:900;color:var(--green-ok)"></div>
+    <div id="pag-selecao" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+      <button onclick="selecionarPagamento('dinheiro')" id="btn-pag-dinheiro" style="padding:20px;border-radius:14px;border:2px solid var(--toast);background:var(--cream);cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;transition:all .2s">
+        💵<br>Dinheiro
+      </button>
+      <button onclick="selecionarPagamento('pix')" id="btn-pag-pix" style="padding:20px;border-radius:14px;border:2px solid var(--toast);background:var(--cream);cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;transition:all .2s">
+        📱<br>Pix
+      </button>
+    </div>
+    <div id="pag-pix-area" style="display:none;text-align:center;margin-top:16px">
+      <canvas id="pix-qrcode" style="border-radius:12px;border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.15)"></canvas>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-muted)">Mostre o QR Code para o cliente escanear</div>
+      <div style="margin-top:8px;background:var(--cream);border-radius:8px;padding:10px;font-size:10px;word-break:break-all;color:var(--text-muted);cursor:pointer" id="pix-copia-cola" onclick="copiarPix()"></div>
+      <button class="btn btn-outline btn-sm" onclick="copiarPix()" style="margin-top:8px">📋 Copiar Pix Copia e Cola</button>
+      <div style="margin-top:20px">
+        <button class="btn btn-green" style="width:100%;justify-content:center;font-size:15px" onclick="confirmarPagamento()">✅ Confirmar Recebimento</button>
+      </div>
+    </div>
+    <div id="pag-dinheiro-area" style="display:none;text-align:center;margin-top:16px">
+      <div style="font-size:48px;margin-bottom:8px">💵</div>
+      <div style="font-size:15px;color:var(--text-muted);margin-bottom:20px">Receba o valor em dinheiro e confirme.</div>
+      <button class="btn btn-green" style="width:100%;justify-content:center;font-size:15px" onclick="confirmarPagamento()">✅ Confirmar Recebimento</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-recibo">
   <div class="modal"><button class="modal-close" onclick="fecharModal('modal-recibo')">✕</button>
     <div class="modal-title">🧾 Recibo de Quitação</div><div id="recibo-content"></div>
@@ -1535,9 +1566,13 @@ const PIX_NOME  = 'Brownie';
 const PIX_CIDADE= 'Brasil';
 let _formaPagamento = null;
 
-function abrirPagamento(){
+async function abrirPagamento(){
+  const pontoId = document.getElementById('acerto-ponto').value;
+  if(!pontoId){ alert('Selecione o ponto antes de registrar o acerto.'); return; }
+  // Garante que o cálculo foi feito
+  await calcularAcerto();
   const valor = parseFloat(document.getElementById('acerto-valor').value)||0;
-  if(!valor) return showAlert('Calcule o acerto antes (selecione o ponto e informe a devolução).','error');
+  if(!valor){ alert('Não há itens em aberto para este ponto.'); return; }
   document.getElementById('pag-valor-display').textContent = fmtMoeda(valor);
   // Reset estado
   _formaPagamento = null;
