@@ -1607,23 +1607,26 @@ function pixCRC16(str){
   let crc=0xFFFF;
   for(let i=0;i<str.length;i++){
     crc^=str.charCodeAt(i)<<8;
-    for(let j=0;j<8;j++) crc=crc&0x8000?(crc<<1)^0x1021:(crc<<1);
+    for(let j=0;j<8;j++) crc=(crc&0x8000)?((crc<<1)^0x1021):(crc<<1);
+    crc&=0xFFFF;
   }
-  return ((crc&0xFFFF).toString(16).toUpperCase()).padStart(4,'0');
+  return crc.toString(16).toUpperCase().padStart(4,'0');
+}
+
+function semAcento(str){
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9 ]/g,'').toUpperCase();
 }
 
 function montarPixString(chave, nome, cidade, valor){
-  function campo(id,val){const t=`${id}${val.length.toString().padStart(2,'0')}${val}`;return t;}
-  const gui = campo('00','BR.GOV.BCB.PIX') + campo('01', chave);
-  const merchant = campo('26', gui);
-  const valorStr = valor>0 ? campo('54', valor.toFixed(2)) : '';
-  const nomeStr  = nome.substring(0,25).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
-  const cidadeStr= cidade.substring(0,15).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
-  let str = campo('00','01') + merchant + campo('52','0000') + campo('53','986') + valorStr +
-            campo('58','BR') + campo('59',nomeStr) + campo('60',cidadeStr) + campo('62',campo('05','***'));
-  str += campo('63','0000');
-  const crc = pixCRC16(str);
-  return str.slice(0,-4) + campo('63', crc);
+  function f(id,val){return id+String(val.length).padStart(2,'0')+val;}
+  const gui      = f('00','BR.GOV.BCB.PIX')+f('01',chave);
+  const merchant = f('26',gui);
+  const valorStr = valor>0 ? f('54',valor.toFixed(2)) : '';
+  const nomeStr  = semAcento(nome).substring(0,25);
+  const cidadeStr= semAcento(cidade).substring(0,15);
+  const additional = f('62',f('05','***'));
+  const body = f('00','01')+merchant+f('52','0000')+f('53','986')+valorStr+f('58','BR')+f('59',nomeStr)+f('60',cidadeStr)+additional+'6304';
+  return body+pixCRC16(body);
 }
 
 function gerarQRPix(valor){
