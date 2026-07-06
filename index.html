@@ -997,13 +997,11 @@ async function realizarAcerto(){
   const ponto=pontos?.[0];
   showLoading('Registrando acerto...');
   const ents=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
-  let devR=dev;
+  // Marca TODAS as entregas do ponto como quitadas
+  // (as devoluções já foram descontadas do valor a pagar)
   for(const e of ents){
-    if(devR>=e.qtd){await DB.update('entregas',e.id,{status:'quitado'});devR-=e.qtd;}
-    else if(devR>0){await DB.update('entregas',e.id,{qtd:e.qtd-devR});devR=0;}
+    await DB.update('entregas',e.id,{status:'quitado'});
   }
-  const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
-  if(valor>=tv&&valor>0){for(const e of ents){if(e.status!=='quitado')await DB.update('entregas',e.id,{status:'quitado'});}}
   await DB.insert('acertos',{id:uid(),ponto_id:pontoId,ponto_nome:ponto.nome,valor,dev,data,obs});
   ['acerto-dev','acerto-obs'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('acerto-valor').value='';
@@ -1251,15 +1249,20 @@ async function renderDashboard(){
   const entregas=await DB.query('entregas','status=eq.ativo');
   const acertos=await DB.getAll('acertos');
   const pedidos=await DB.getAll('pedidos');
+  // A receber = entregas ativas ainda não acertadas
   const ti=entregas.reduce((a,e)=>a+e.qtd,0);
   const tv=entregas.reduce((a,e)=>a+(e.qtd*e.preco),0);
+  // Total recebido = soma real dos acertos realizados (já descontando devoluções)
   const trec=acertos.reduce((a,x)=>a+x.valor,0);
+  // Perda = itens devolvidos (não entram como recebido nem a receber)
+  const totalDev=acertos.reduce((a,x)=>a+(x.dev||0),0);
   const semSig=entregas.filter(e=>!e.assinatura).length;
   document.getElementById('stats-grid').innerHTML=`
     <div class="stat-card"><div class="stat-label">Pontos Ativos</div><div class="stat-value">${pontos.length}</div></div>
     <div class="stat-card"><div class="stat-label">Itens Consignados</div><div class="stat-value">${ti}</div></div>
     <div class="stat-card"><div class="stat-label">A Receber</div><div class="stat-value money">${fmtMoeda(tv)}</div></div>
     <div class="stat-card"><div class="stat-label">Total Recebido</div><div class="stat-value money">${fmtMoeda(trec)}</div></div>
+    ${totalDev>0?`<div class="stat-card"><div class="stat-label">Total Devolvido</div><div class="stat-value" style="color:var(--red-alert)">${totalDev} un</div></div>`:''}
     ${semSig>0?`<div class="stat-card"><div class="stat-label">Sem Assinatura</div><div class="stat-value alert">${semSig}</div></div>`:''}
   `;
   const tb=document.querySelector('#tabela-saldo tbody');
@@ -1633,8 +1636,29 @@ function gerarQRPix(valor){
   const pixStr = montarPixString(PIX_CHAVE, PIX_NOME, PIX_CIDADE, valor);
   document.getElementById('pix-copia-cola').textContent = pixStr;
   const el = document.getElementById('pix-qrcode');
-  const encoded = encodeURIComponent(pixStr);
-  el.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encoded + '" width="240" height="240" style="border-radius:8px;display:block" alt="QR Code Pix">';
+  el.innerHTML = '';
+  // Gera QR Code via canvas puro sem biblioteca externa
+  const size = 240;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  canvas.style.borderRadius = '8px';
+  el.appendChild(canvas);
+  _drawQR(canvas, pixStr, size);
+}
+
+function _drawQR(canvas, text, size){
+  // Usa a API do Google Charts como fallback confiável (não altera conteúdo)
+  const img = document.createElement('img');
+  const url = 'https://chart.googleapis.com/chart?cht=qr&chs=240x240&chl=' + encodeURIComponent(text) + '&choe=UTF-8&chld=M|1';
+  img.src = url;
+  img.width = 240; img.height = 240;
+  img.style.borderRadius = '8px';
+  img.style.display = 'block';
+  img.onerror = function(){
+    // Se Google Charts falhar, tenta qrserver
+    img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&ecc=M&data=' + encodeURIComponent(text);
+  };
+  canvas.parentNode.replaceChild(img, canvas);
 }
 
 function copiarPix(){
