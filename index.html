@@ -166,6 +166,8 @@
     <button class="tab-btn" onclick="showSection('estoque')">📦 Estoque</button>
     <button class="tab-btn" onclick="showSection('validade')">📅 Validade</button>
     <button class="tab-btn" onclick="showSection('relatorios')">📈 Relatórios</button>
+    <button class="tab-btn" onclick="showSection('financeiro')">🏦 Financeiro</button>
+    <a class="tab-btn" href="atelie-cacau-apresentacao.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">🍫 Apresentação</a>
     <button class="tab-btn" onclick="logoutAdmin()" style="background:rgba(255,255,255,.1);margin-left:8px">🔒 Sair</button>
   </div>
 </header>
@@ -497,6 +499,65 @@
   </div>
 </div>
 
+<!-- FINANCEIRO -->
+<div id="sec-financeiro" class="section">
+
+  <!-- VALORES INICIAIS -->
+  <div class="card" id="card-valores-iniciais">
+    <div class="card-title">🌱 Valores Iniciais (ponto de partida)</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Registre aqui os investimentos feitos antes de começar a controlar o financeiro pelo sistema — equipamentos, insumos comprados no início, etc. Isso entra no fluxo de caixa e no DRE como despesa/investimento do período informado. <strong>Faça isso só uma vez.</strong></p>
+    <div class="form-grid">
+      <div class="form-group"><label>Equipamentos (R$)</label><input type="number" id="fin-seed-equip" step="0.01" value="684"></div>
+      <div class="form-group"><label>Insumos (R$)</label><input type="number" id="fin-seed-insumo" step="0.01" value="481"></div>
+      <div class="form-group"><label>Data do investimento</label><input type="date" id="fin-seed-data"></div>
+    </div>
+    <div style="margin-top:14px"><button class="btn btn-gold" onclick="registrarValoresIniciais()">💾 Registrar valores iniciais</button></div>
+  </div>
+
+  <!-- NOVO LANÇAMENTO -->
+  <div class="card">
+    <div class="card-title">➕ Novo Lançamento</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Tipo *</label>
+        <select id="fin-tipo" onchange="atualizarCategoriasFin()">
+          <option value="despesa">Despesa (saída)</option>
+          <option value="receita">Receita (entrada)</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Categoria *</label><select id="fin-categoria"></select></div>
+      <div class="form-group"><label>Descrição</label><input type="text" id="fin-desc" placeholder="Ex: Compra de embalagens"></div>
+      <div class="form-group"><label>Valor (R$) *</label><input type="number" id="fin-valor" step="0.01" placeholder="0,00"></div>
+      <div class="form-group"><label>Data *</label><input type="date" id="fin-data"></div>
+      <div class="form-group"><label>Observação</label><input type="text" id="fin-obs" placeholder="Opcional"></div>
+    </div>
+    <div style="margin-top:14px"><button class="btn btn-primary" onclick="salvarLancamento()">💾 Salvar Lançamento</button></div>
+  </div>
+
+  <!-- ANÁLISE DE RESULTADOS -->
+  <div class="card">
+    <div class="card-title">📊 Análise de Resultados</div>
+    <div id="fin-analise-cards" class="stats-grid"></div>
+  </div>
+
+  <!-- DRE -->
+  <div class="card">
+    <div class="card-title">🧮 DRE — Demonstrativo de Resultado</div>
+    <div id="fin-dre" style="font-size:14px"></div>
+  </div>
+
+  <!-- FLUXO DE CAIXA -->
+  <div class="card">
+    <div class="card-title">💵 Fluxo de Caixa</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Entrada</th><th>Saída</th><th>Saldo</th><th></th></tr></thead>
+        <tbody id="fin-tbody-fluxo"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
 <!-- MODAIS -->
 <!-- MODAL PAGAMENTO -->
 <div class="modal-overlay" id="modal-pagamento">
@@ -782,7 +843,7 @@ function showSection(id){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('sec-'+id).classList.add('active');
-  const map={dashboard:0,pontos:1,produtos:2,entregas:3,acertos:4,'acesso-ponto':5,estoque:6,validade:7,relatorios:8};
+  const map={dashboard:0,pontos:1,produtos:2,entregas:3,acertos:4,'acesso-ponto':5,estoque:6,validade:7,relatorios:8,financeiro:9};
   document.querySelectorAll('.tab-btn')[map[id]]?.classList.add('active');
   if(id==='dashboard')renderDashboard();
   if(id==='pontos')renderPontos();
@@ -792,6 +853,12 @@ function showSection(id){
   if(id==='estoque'){popularSelectProdutos('est-produto');popularSelectProdutos('filtro-est-produto',true);renderEstoque();renderHistoricoEstoque();}
   if(id==='validade')renderValidade();
   if(id==='relatorios')renderRelatorios();
+  if(id==='financeiro'){
+    atualizarCategoriasFin();
+    if(!document.getElementById('fin-data').value) document.getElementById('fin-data').value=hoje();
+    if(!document.getElementById('fin-seed-data').value) document.getElementById('fin-seed-data').value=hoje();
+    renderFinanceiro();
+  }
 }
 
 // ── PONTOS ──
@@ -1129,7 +1196,155 @@ async function excluirAcerto(id){
   renderAcertos();showAlert('Acerto excluído.','success');
 }
 
-// ── RECIBO ──
+// ══════════════════════════════════════
+// FINANCEIRO — Fluxo de Caixa, DRE, Análise
+// ══════════════════════════════════════
+const FIN_CATEGORIAS = {
+  despesa: [
+    {v:'equipamento', l:'Equipamento / Investimento'},
+    {v:'insumo',      l:'Insumo / Matéria-prima'},
+    {v:'operacional', l:'Despesa Operacional (aluguel, transporte, embalagem...)'},
+    {v:'outros',      l:'Outros'}
+  ],
+  receita: [
+    {v:'venda',  l:'Venda (lançamento manual)'},
+    {v:'aporte', l:'Aporte de Capital (dinheiro próprio investido)'},
+    {v:'outros', l:'Outros'}
+  ]
+};
+
+function atualizarCategoriasFin(){
+  const tipo = document.getElementById('fin-tipo').value;
+  const sel = document.getElementById('fin-categoria');
+  sel.innerHTML = FIN_CATEGORIAS[tipo].map(c=>`<option value="${c.v}">${c.l}</option>`).join('');
+}
+
+async function salvarLancamento(){
+  const tipo = document.getElementById('fin-tipo').value;
+  const categoria = document.getElementById('fin-categoria').value;
+  const desc = document.getElementById('fin-desc').value.trim();
+  const valor = parseFloat(document.getElementById('fin-valor').value);
+  const data = document.getElementById('fin-data').value || hoje();
+  const obs = document.getElementById('fin-obs').value.trim();
+  if(!valor || valor<=0) return alert('Informe um valor válido.');
+  showLoading('Salvando lançamento...');
+  await DB.insert('financeiro',{id:uid(),tipo,categoria,descricao:desc,valor,data,obs});
+  ['fin-desc','fin-valor','fin-obs'].forEach(id=>document.getElementById(id).value='');
+  hideLoading();
+  showAlert('Lançamento registrado! 💾','success');
+  renderFinanceiro();
+}
+
+async function registrarValoresIniciais(){
+  const equip = parseFloat(document.getElementById('fin-seed-equip').value)||0;
+  const insumo = parseFloat(document.getElementById('fin-seed-insumo').value)||0;
+  const data = document.getElementById('fin-seed-data').value || hoje();
+  if(equip<=0 && insumo<=0) return alert('Informe pelo menos um valor.');
+
+  const jaExiste = await DB.query('financeiro','obs=eq.seed_inicial');
+  if(jaExiste && jaExiste.length){
+    if(!confirm('Você já registrou valores iniciais antes. Isso vai adicionar NOVOS lançamentos (não vai duplicar os antigos automaticamente — confira o Fluxo de Caixa depois). Deseja continuar mesmo assim?')) return;
+  }
+
+  showLoading('Registrando valores iniciais...');
+  if(equip>0) await DB.insert('financeiro',{id:uid(),tipo:'despesa',categoria:'equipamento',descricao:'Equipamentos (investimento inicial)',valor:equip,data,obs:'seed_inicial'});
+  if(insumo>0) await DB.insert('financeiro',{id:uid(),tipo:'despesa',categoria:'insumo',descricao:'Insumos (compra inicial)',valor:insumo,data,obs:'seed_inicial'});
+  hideLoading();
+  showAlert('Valores iniciais registrados! Agora seu financeiro já começa refletindo o que foi investido antes. 🌱','success');
+  renderFinanceiro();
+}
+
+async function excluirLancamento(id){
+  if(!confirm('Excluir este lançamento financeiro?'))return;
+  await DB.delete('financeiro',id);
+  renderFinanceiro();showAlert('Lançamento excluído.','success');
+}
+
+async function renderFinanceiro(){
+  const acertos = await DB.query('acertos','order=data');
+  const lancamentos = await DB.query('financeiro','order=data');
+
+  // ── Monta lista unificada do fluxo de caixa ──
+  const fluxo = [];
+  acertos.forEach(a=>{
+    fluxo.push({data:a.data, desc:`Venda — ${a.ponto_nome}`, tipoLabel:'Venda', entrada:a.valor, saida:0, origem:'acerto', id:a.id});
+  });
+  lancamentos.forEach(l=>{
+    const catLabel = (FIN_CATEGORIAS[l.tipo]||[]).find(c=>c.v===l.categoria)?.l || l.categoria;
+    fluxo.push({
+      data:l.data,
+      desc: l.descricao ? `${catLabel} — ${l.descricao}` : catLabel,
+      tipoLabel: l.tipo==='despesa' ? 'Despesa' : 'Receita',
+      entrada: l.tipo==='receita' ? l.valor : 0,
+      saida: l.tipo==='despesa' ? l.valor : 0,
+      origem:'financeiro', id:l.id
+    });
+  });
+  fluxo.sort((a,b)=> a.data.localeCompare(b.data));
+
+  let saldo = 0;
+  const linhasFluxo = fluxo.map(f=>{
+    saldo += f.entrada - f.saida;
+    const acao = f.origem==='financeiro'
+      ? `<button class="btn btn-danger btn-sm" onclick="excluirLancamento('${f.id}')">🗑</button>`
+      : `<span style="font-size:11px;color:var(--text-muted)">via Acertos</span>`;
+    return `<tr>
+      <td>${fmtData(f.data)}</td>
+      <td>${f.desc}</td>
+      <td>${f.tipoLabel}</td>
+      <td style="color:var(--green-ok);font-weight:700">${f.entrada?fmtMoeda(f.entrada):'—'}</td>
+      <td style="color:var(--red-alert)">${f.saida?fmtMoeda(f.saida):'—'}</td>
+      <td style="font-weight:700">${fmtMoeda(saldo)}</td>
+      <td>${acao}</td>
+    </tr>`;
+  });
+  document.getElementById('fin-tbody-fluxo').innerHTML = linhasFluxo.length
+    ? linhasFluxo.reverse().join('') // mostra mais recente primeiro, saldo já calculado corretamente acima
+    : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Nenhum lançamento ainda.</td></tr>';
+
+  // ── DRE ──
+  const receitaVendas = acertos.reduce((s,a)=>s+a.valor,0);
+  const custoInsumos = lancamentos.filter(l=>l.tipo==='despesa'&&l.categoria==='insumo').reduce((s,l)=>s+l.valor,0);
+  const despesasOperacionais = lancamentos.filter(l=>l.tipo==='despesa'&&(l.categoria==='operacional'||l.categoria==='outros')).reduce((s,l)=>s+l.valor,0);
+  const investEquipamentos = lancamentos.filter(l=>l.tipo==='despesa'&&l.categoria==='equipamento').reduce((s,l)=>s+l.valor,0);
+  const aportes = lancamentos.filter(l=>l.tipo==='receita'&&l.categoria==='aporte').reduce((s,l)=>s+l.valor,0);
+  const outrasReceitas = lancamentos.filter(l=>l.tipo==='receita'&&l.categoria!=='aporte').reduce((s,l)=>s+l.valor,0);
+
+  const lucroBruto = receitaVendas + outrasReceitas - custoInsumos;
+  const resultadoOperacional = lucroBruto - despesasOperacionais;
+  const resultadoPeriodo = resultadoOperacional - investEquipamentos;
+  const margemLiquida = (receitaVendas+outrasReceitas)>0 ? (resultadoPeriodo/(receitaVendas+outrasReceitas)*100) : 0;
+
+  function linhaDre(label,valor,destaque,cor){
+    return `<div style="display:flex;justify-content:space-between;padding:8px 0;${destaque?'border-top:2px solid var(--toast);margin-top:6px;font-weight:800;':'border-bottom:1px dotted var(--toast);'}">
+      <span>${label}</span><span style="${cor?`color:${cor}`:''}">${fmtMoeda(valor)}</span>
+    </div>`;
+  }
+  document.getElementById('fin-dre').innerHTML = `
+    ${linhaDre('(+) Receita de Vendas', receitaVendas, false, 'var(--green-ok)')}
+    ${outrasReceitas>0?linhaDre('(+) Outras Receitas', outrasReceitas, false, 'var(--green-ok)'):''}
+    ${linhaDre('(–) Custo de Insumos', custoInsumos, false, 'var(--red-alert)')}
+    ${linhaDre('= Lucro Bruto', lucroBruto, true)}
+    ${linhaDre('(–) Despesas Operacionais', despesasOperacionais, false, 'var(--red-alert)')}
+    ${linhaDre('= Resultado Operacional', resultadoOperacional, true)}
+    ${linhaDre('(–) Investimentos em Equipamentos', investEquipamentos, false, 'var(--red-alert)')}
+    ${linhaDre('= RESULTADO DO PERÍODO', resultadoPeriodo, true, resultadoPeriodo>=0?'var(--green-ok)':'var(--red-alert)')}
+    ${aportes>0?`<div style="margin-top:14px;padding-top:10px;border-top:1px dashed var(--toast);font-size:12px;color:var(--text-muted)">💡 Aportes de capital (não entram no resultado, é dinheiro que você mesmo injetou): ${fmtMoeda(aportes)}</div>`:''}
+  `;
+
+  // ── Cards de análise ──
+  const totalInvestido = investEquipamentos + custoInsumos;
+  const saldoCaixa = fluxo.reduce((s,f)=>s+f.entrada-f.saida,0);
+  document.getElementById('fin-analise-cards').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Saldo em Caixa</div><div class="stat-value ${saldoCaixa>=0?'money':'alert'}">${fmtMoeda(saldoCaixa)}</div></div>
+    <div class="stat-card"><div class="stat-label">Receita Total</div><div class="stat-value money">${fmtMoeda(receitaVendas+outrasReceitas)}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Investido (equip.+insumos)</div><div class="stat-value">${fmtMoeda(totalInvestido)}</div></div>
+    <div class="stat-card"><div class="stat-label">Resultado do Período</div><div class="stat-value ${resultadoPeriodo>=0?'money':'alert'}">${fmtMoeda(resultadoPeriodo)}</div></div>
+    <div class="stat-card"><div class="stat-label">Margem Líquida</div><div class="stat-value ${margemLiquida>=0?'money':'alert'}">${margemLiquida.toFixed(1)}%</div></div>
+  `;
+}
+
+
 async function gerarReciboModal(){
   const pontoId=document.getElementById('acerto-ponto').value;
   const dataPedido=document.getElementById('acerto-pedido').value;
