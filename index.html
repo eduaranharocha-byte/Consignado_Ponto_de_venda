@@ -166,7 +166,6 @@
     <button class="tab-btn" onclick="showSection('estoque')">📦 Estoque</button>
     <button class="tab-btn" onclick="showSection('validade')">📅 Validade</button>
     <button class="tab-btn" onclick="showSection('relatorios')">📈 Relatórios</button>
-    <a class="tab-btn" href="atelie-cacau-apresentacao.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">🍫 Apresentação</a>
     <button class="tab-btn" onclick="logoutAdmin()" style="background:rgba(255,255,255,.1);margin-left:8px">🔒 Sair</button>
   </div>
 </header>
@@ -297,7 +296,8 @@
 <div id="sec-acertos" class="section">
   <div class="card"><div class="card-title">💰 Realizar Acerto</div>
     <div class="form-grid">
-      <div class="form-group"><label>Ponto *</label><select id="acerto-ponto" onchange="calcularAcerto()"></select></div>
+      <div class="form-group"><label>Ponto *</label><select id="acerto-ponto" onchange="carregarPedidosPonto()"></select></div>
+      <div class="form-group"><label>Pedido em aberto *</label><select id="acerto-pedido" onchange="calcularAcerto()"><option value="">Selecione o ponto...</option></select></div>
       <div class="form-group"><label>Data</label><input type="date" id="acerto-data"></div>
       <div class="form-group"><label>Qtd Devolvida</label><input type="number" id="acerto-dev" placeholder="0" min="0" oninput="calcularAcerto()"></div>
       <div class="form-group"><label>Observação</label><input type="text" id="acerto-obs" placeholder="Opcional"></div>
@@ -788,7 +788,7 @@ function showSection(id){
   if(id==='pontos')renderPontos();
   if(id==='produtos')renderProdutos();
   if(id==='entregas'){popularSelectPontos('ent-ponto');popularSelectPontos('filtro-ent-ponto',true);popularSelectProdutos('ent-produto');renderEntregas();}
-  if(id==='acertos'){popularSelectPontos('acerto-ponto');renderAcertos();}
+  if(id==='acertos'){popularSelectPontos('acerto-ponto');document.getElementById('acerto-pedido').innerHTML='<option value="">Selecione o ponto...</option>';document.getElementById('acerto-resumo').style.display='none';renderAcertos();}
   if(id==='estoque'){popularSelectProdutos('est-produto');popularSelectProdutos('filtro-est-produto',true);renderEstoque();renderHistoricoEstoque();}
   if(id==='validade')renderValidade();
   if(id==='relatorios')renderRelatorios();
@@ -1022,15 +1022,44 @@ async function excluirEntrega(id){
 }
 
 // ── ACERTOS ──
+async function carregarPedidosPonto(){
+  const pontoId=document.getElementById('acerto-ponto').value;
+  const sel=document.getElementById('acerto-pedido');
+  const r=document.getElementById('acerto-resumo');
+  sel.innerHTML='<option value="">Selecione...</option>';
+  r.style.display='none';
+  if(!pontoId)return;
+  const ents=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
+  if(!ents.length){
+    sel.innerHTML='<option value="">Nenhum pedido em aberto</option>';
+    return;
+  }
+  // Agrupa por data de entrega — cada data distinta é um pedido/visita separado
+  const porData={};
+  ents.forEach(e=>{
+    if(!porData[e.data])porData[e.data]={itens:0,valor:0};
+    porData[e.data].itens+=e.qtd;
+    porData[e.data].valor+=e.qtd*e.preco;
+  });
+  const datas=Object.keys(porData).sort((a,b)=>b.localeCompare(a));
+  sel.innerHTML='<option value="">Selecione o pedido...</option>'+datas.map(d=>
+    `<option value="${d}">${fmtData(d)} — ${porData[d].itens} itens — ${fmtMoeda(porData[d].valor)}</option>`
+  ).join('');
+  // Se só existe 1 pedido em aberto, já seleciona automaticamente
+  if(datas.length===1){sel.value=datas[0];calcularAcerto();}
+}
 async function calcularAcerto(){
   const pontoId=document.getElementById('acerto-ponto').value;
+  const dataPedido=document.getElementById('acerto-pedido').value;
   const r=document.getElementById('acerto-resumo');
-  if(!pontoId){r.style.display='none';return;}
-  const ents=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
+  if(!pontoId||!dataPedido){r.style.display='none';return;}
+  const todas=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
+  // Filtra SOMENTE as entregas do pedido (data) selecionado — não mistura com outras visitas
+  const ents=todas.filter(e=>e.data===dataPedido);
   const ti=ents.reduce((a,e)=>a+e.qtd,0);
   const tv=ents.reduce((a,e)=>a+(e.qtd*e.preco),0);
   const dev=parseInt(document.getElementById('acerto-dev').value)||0;
-  // Calcula valor das devoluções (usa preço médio ponderado)
+  // Calcula valor das devoluções (usa preço médio ponderado) — apenas dentro deste pedido
   let devRestante=dev; let valorDev=0;
   for(const e of ents){
     if(devRestante<=0)break;
@@ -1043,7 +1072,7 @@ async function calcularAcerto(){
   r.style.display='block';
   const vendido=ti-dev;
   r.innerHTML=`
-    <div style="margin-bottom:10px"><strong>Em aberto</strong> · ${ti} itens · <span style="color:var(--text-muted)">Total consignado: ${fmtMoeda(tv)}</span></div>
+    <div style="margin-bottom:10px"><strong>Pedido de ${fmtData(dataPedido)}</strong> · ${ti} itens · <span style="color:var(--text-muted)">Total consignado: ${fmtMoeda(tv)}</span></div>
     ${ents.map(e=>`<div style="font-size:13px;color:var(--text-muted)">— ${e.prod_nome}: ${e.qtd}×${fmtMoeda(e.preco)} = ${fmtMoeda(e.qtd*e.preco)}</div>`).join('')}
     <hr style="margin:12px 0;border:none;border-top:1px solid var(--toast)">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center">
@@ -1063,18 +1092,21 @@ async function calcularAcerto(){
 }
 async function realizarAcerto(){
   const pontoId=document.getElementById('acerto-ponto').value;
+  const dataPedido=document.getElementById('acerto-pedido').value;
   const valor=parseFloat(document.getElementById('acerto-valor').value)||0;
   const dev=parseInt(document.getElementById('acerto-dev').value)||0;
   const data=document.getElementById('acerto-data').value||hoje();
   const obs=document.getElementById('acerto-obs').value.trim();
   if(!pontoId)return alert('Selecione o ponto.');
+  if(!dataPedido)return alert('Selecione qual pedido em aberto você está acertando.');
   // valor é calculado automaticamente por calcularAcerto()
   const pontos=await DB.query('pontos',`id=eq.${pontoId}`);
   const ponto=pontos?.[0];
   showLoading('Registrando acerto...');
-  const ents=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
-  // Marca TODAS as entregas do ponto como quitadas
-  // (as devoluções já foram descontadas do valor a pagar)
+  const todas=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
+  // Marca como quitadas SOMENTE as entregas do pedido selecionado
+  // (outras entregas/visitas do mesmo ponto continuam em aberto normalmente)
+  const ents=todas.filter(e=>e.data===dataPedido);
   for(const e of ents){
     await DB.update('entregas',e.id,{status:'quitado'});
   }
@@ -1083,7 +1115,7 @@ async function realizarAcerto(){
   document.getElementById('acerto-valor').value='';
   document.getElementById('acerto-resumo').style.display='none';
   hideLoading();
-  renderAcertos();showAlert(`Acerto de ${fmtMoeda(valor)} registrado para ${ponto.nome}! 💰`,'success');
+  renderAcertos();carregarPedidosPonto();showAlert(`Acerto de ${fmtMoeda(valor)} registrado para ${ponto.nome}! 💰`,'success');
 }
 async function renderAcertos(){
   const a=await DB.query('acertos','order=id.desc');
@@ -1100,10 +1132,13 @@ async function excluirAcerto(id){
 // ── RECIBO ──
 async function gerarReciboModal(){
   const pontoId=document.getElementById('acerto-ponto').value;
+  const dataPedido=document.getElementById('acerto-pedido').value;
   if(!pontoId)return alert('Selecione o ponto.');
+  if(!dataPedido)return alert('Selecione qual pedido você quer o recibo.');
   const pontos=await DB.query('pontos',`id=eq.${pontoId}`);
   const ponto=pontos?.[0];
-  const entregas=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
+  const todas=await DB.query('entregas',`ponto_id=eq.${pontoId}&status=eq.ativo`);
+  const entregas=todas.filter(e=>e.data===dataPedido);
   const valorCalc=parseFloat(document.getElementById('acerto-valor').value)||0;
   mostrarRecibo({ponto,valor:valorCalc,dev:parseInt(document.getElementById('acerto-dev').value)||0,data:document.getElementById('acerto-data').value||hoje(),obs:document.getElementById('acerto-obs').value.trim(),entregas,id:'PREV-'+Date.now()});
 }
@@ -1647,7 +1682,9 @@ let _formaPagamento = null;
 
 async function abrirPagamento(){
   const pontoId = document.getElementById('acerto-ponto').value;
+  const dataPedido = document.getElementById('acerto-pedido').value;
   if(!pontoId){ alert('Selecione o ponto antes de registrar o acerto.'); return; }
+  if(!dataPedido){ alert('Selecione qual pedido em aberto você está acertando.'); return; }
   // Garante que o cálculo foi feito
   await calcularAcerto();
   const valor = parseFloat(document.getElementById('acerto-valor').value)||0;
